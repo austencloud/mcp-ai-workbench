@@ -1,0 +1,291 @@
+/* ===== 2025-READY ANIMATIONS & MICRO-INTERACTIONS ===== */
+
+/* Enhanced Keyframe Animations */
+@keyframes float-particle {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes hologram-rotate {
+  0% {
+    transform: rotateY(0deg);
+  }
+  100% {
+    transform: rotateY(360deg);
+  }
+}
+
+@keyframes energy-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: var(--neon-glow-subtle) var(--light-color);
+  }
+  50% {
+    box-shadow: var(--neon-glow-strong) var(--light-color);
+  }
+}
+
+@keyframes scale-in {
+  0% {
+    transform: scale(0.8) translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  0% {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-blur {
+  0% {
+    opacity: 0;
+    filter: blur(10px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* Micro-Interaction Classes */
+.micro-bounce {
+  transition: transform 0.2s var(--ease-bounce);
+}
+
+.micro-bounce:hover {
+  transform: scale(1.05) translateY(-2px);
+}
+
+.micro-bounce:active {
+  transform: scale(0.95) translateY(0);
+}
+
+.micro-lift {
+  transition: all 0.3s var(--ease-smooth);
+}
+
+.micro-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--depth-4);
+}
+
+.micro-glow {
+  transition: all 0.3s var(--ease-smooth);
+}
+
+.micro-glow:hover {
+  box-shadow: var(--neon-glow-medium) var(--light-color);
+}
+
+.micro-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.micro-shimmer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.6s var(--ease-smooth);
+}
+
+.micro-shimmer:hover::before {
+  left: 100%;
+}
+
+/* Enhanced Focus States for Accessibility */
+.focus-enhanced:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring), var(--depth-2);
+  transform: translateY(-2px);
+}
+
+/* Intersection Observer Animation Classes */
+.in-view {
+  animation: scale-in 0.6s var(--ease-smooth) forwards;
+}
+
+.slide-in-view {
+  animation: slide-up 0.8s var(--ease-smooth) forwards;
+}
+
+.fade-in-view {
+  animation: fade-in-blur 1s var(--ease-smooth) forwards;
+}
+
+/* Provider Transition Effects */
+.provider-transition {
+  transition: all 1.2s var(--ease-smooth);
+}
+
+.provider-transition * {
+  transition: border-color 1.2s var(--ease-smooth),
+              box-shadow 1.2s var(--ease-smooth),
+              background 1.2s var(--ease-smooth);
+}
+
+/* Pulse Effect for Notifications */
+.pulse-effect {
+  animation: glow-pulse 1s var(--ease-smooth) 2;
+}
+
+/* Highlight Effects */
+.highlight-subtle {
+  box-shadow: var(--neon-glow-subtle) var(--light-color);
+  border-color: var(--light-color);
+}
+
+.highlight-medium {
+  box-shadow: var(--neon-glow-medium) var(--light-color);
+  border-color: var(--light-color);
+  transform: translateY(-2px);
+}
+
+.highlight-strong {
+  box-shadow: var(--neon-glow-strong) var(--light-color);
+  border-color: var(--light-color);
+  transform: translateY(-4px) scale(1.02);
+}
+
+/* Holographic Chat Bubble Effect */
+.chat-bubble-hologram {
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-bubble-hologram::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    transparent,
+    rgba(139, 92, 246, 0.2),
+    transparent 30%
+  );
+  animation: hologram-rotate 6s linear infinite;
+  z-index: -1;
+}
+
+/* Energy Flow Background */
+.energy-flow {
+  background: linear-gradient(
+    -45deg,
+    transparent 0%,
+    rgba(139, 92, 246, 0.1) 25%,
+    rgba(59, 130, 246, 0.1) 50%,
+    rgba(244, 114, 182, 0.1) 75%,
+    transparent 100%
+  );
+  background-size: 400% 400%;
+  animation: energy-flow 8s ease-in-out infinite;
+}
+
+/* Loading States */
+.loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--glass-bg-primary) 25%,
+    var(--glass-bg-secondary) 50%,
+    var(--glass-bg-primary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Stagger Animation for Lists */
+.stagger-item {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: slide-up 0.6s var(--ease-smooth) forwards;
+}
+
+.stagger-item:nth-child(1) { animation-delay: 0.1s; }
+.stagger-item:nth-child(2) { animation-delay: 0.2s; }
+.stagger-item:nth-child(3) { animation-delay: 0.3s; }
+.stagger-item:nth-child(4) { animation-delay: 0.4s; }
+.stagger-item:nth-child(5) { animation-delay: 0.5s; }
+.stagger-item:nth-child(6) { animation-delay: 0.6s; }
+.stagger-item:nth-child(7) { animation-delay: 0.7s; }
+.stagger-item:nth-child(8) { animation-delay: 0.8s; }
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .hologram-rotate,
+  .energy-flow,
+  .float-particle {
+    animation: none !important;
+  }
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+  :root {
+    --glass-border-primary: rgba(255, 255, 255, 0.8);
+    --glass-border-secondary: rgba(255, 255, 255, 0.9);
+    --glass-border-accent: rgba(255, 255, 255, 1);
+    --focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.8);
+  }
+}
