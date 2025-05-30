@@ -1,5 +1,6 @@
 <script lang="ts">
   import { setContext } from 'svelte';
+  import { page } from '$app/stores';
   import { mcp, type Todo, type Workspace, type ChatMessage, type Persona, type Snippet } from '$lib/services/mcpClient';
   import '../app.css';
 
@@ -13,6 +14,9 @@
   import AIProviderSelector from '$lib/components/AIProviderSelector.svelte';
 
   let { children } = $props();
+
+  // Check if we're on the home page
+  let isHomePage = $derived($page.route.id === '/' || $page.route.id === null);
 
   // Svelte 5 runes for state management
   let workspaces = $state<Workspace[]>([]);
@@ -200,7 +204,7 @@
         </div>
       </div>
     </div>
-  {:else}
+  {:else if isHomePage}
     <div class="grid grid-cols-sidebar h-full gap-4 p-4">
       <!-- Sidebar -->
       <aside class="sidebar-futuristic p-6 flex flex-col custom-scrollbar">
@@ -276,6 +280,21 @@
               </button>
             </div>
           </div>
+
+          <!-- Voice Testing Section -->
+          <div class="space-y-3 flex-shrink-0">
+            <div class="flex items-center space-x-2">
+              <div class="w-2 h-2 bg-pink-400 rounded-full animate-pulse"></div>
+              <h2 class="text-sm font-medium text-white/70">Voice Testing</h2>
+              <a 
+                href="/voice-testing" 
+                class="ml-auto text-xs text-pink-300 hover:text-pink-200 transition-colors"
+                target="_blank"
+              >
+                🎤 Test
+              </a>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -301,7 +320,7 @@
         </div>
       </main>
     </div>
+  {:else}
+    {@render children?.()}
   {/if}
 </div>
-
-{@render children?.()}

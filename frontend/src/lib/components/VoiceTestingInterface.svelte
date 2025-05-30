@@ -33,19 +33,57 @@
   let testSuites: TestSuite[] = $state([]);
   let selectedSuite = $state<string>('');
   let testResults: TestResult[] = $state([]);
-  let isRunning = $state(false);
+  let isRunningTests = $state(false);
+  let isConnected = $state(false);
+  let connectionError = $state<string | null>(null);
   let customText = $state('');
-  let sensitivityResults: any[] = $state([]);
-  let showCustomTest = $state(false);
+  let customSensitivity = $state<'low' | 'medium' | 'high'>('medium');
+  let customResults = $state<any>(null);
+  let backendStats = $state<any>(null);
 
-  onMount(async () => {
-    await loadTestSuites();
-  });
+  async function checkBackendConnection() {
+    try {
+      connectionError = null;
+      const response = await mcp.getVoiceStats();
+      
+      // Handle undefined or null response
+      if (!response) {
+        throw new Error('No response from backend');
+      }
+      
+      // Check if response has success property and it's true
+      if (response.success === true) {
+        isConnected = true;
+        backendStats = response.data;
+        console.log('✅ Backend connected successfully');
+      } else if (response.success === false) {
+        throw new Error(response.error || 'Backend returned unsuccessful response');
+      } else {
+        // If no success property, treat as successful if we got data
+        if (response.data || Object.keys(response).length > 0) {
+          isConnected = true;
+          backendStats = response;
+          console.log('✅ Backend connected successfully (legacy response format)');
+        } else {
+          throw new Error('Backend response format not recognized');
+        }
+      }
+    } catch (error) {
+      console.error('Backend connection error:', error);
+      isConnected = false;
+      connectionError = 'Failed to connect to backend. Please check if the server is running on the correct port.';
+    }
+  }
 
   async function loadTestSuites() {
+    if (!isConnected) return;
+    
     try {
-      const response = await mcp.call('runTestSuite', {});
-      if (response.success) {
+      const response = await mcp.runTestSuite();
+      if (response?.success && response.data?.availableSuites) {
+        testSuites = response.data.availableSuites;
+      } else if (response?.data?.availableSuites) {
+        // Handle legacy response format
         testSuites = response.data.availableSuites;
       }
     } catch (error) {
@@ -54,230 +92,225 @@
   }
 
   async function runTestSuite() {
-    if (!selectedSuite) return;
+    if (!selectedSuite || !isConnected) return;
     
-    isRunning = true;
+    isRunningTests = true;
+    testResults = [];
+    
     try {
-      const response = await mcp.call('runTestSuite', { suite: selectedSuite });
-      if (response.success) {
+      const response = await mcp.runTestSuite({ suite: selectedSuite });
+      if (response?.success && response.data?.results) {
+        testResults = response.data.results;
+      } else if (response?.data?.results) {
+        // Handle legacy response format
         testResults = response.data.results;
       }
     } catch (error) {
       console.error('Failed to run test suite:', error);
     } finally {
-      isRunning = false;
+      isRunningTests = false;
     }
   }
 
   async function runAllTests() {
-    isRunning = true;
+    if (!isConnected) return;
+    
+    isRunningTests = true;
+    testResults = [];
+    
     try {
-      const response = await mcp.call('testVoiceProcessing', {});
-      if (response.success) {
-        // Flatten all test results from all suites
-        const allResults = Object.values(response.data.testResults).flat() as TestResult[];
-        testResults = allResults;
+      const response = await mcp.testVoiceProcessing();
+      if (response?.success && response.data?.testResults) {
+        const allResults = Object.values(response.data.testResults).flat();
+        testResults = allResults as TestResult[];
+      } else if (response?.data?.testResults) {
+        // Handle legacy response format
+        const allResults = Object.values(response.data.testResults).flat();
+        testResults = allResults as TestResult[];
       }
     } catch (error) {
       console.error('Failed to run all tests:', error);
     } finally {
-      isRunning = false;
+      isRunningTests = false;
     }
   }
 
-  async function testSensitivity() {
-    if (!customText.trim()) return;
+  async function testCustomText() {
+    if (!customText.trim() || !isConnected) return;
     
-    isRunning = true;
     try {
-      const response = await mcp.call('testCorrectionSensitivity', { text: customText });
-      if (response.success) {
-        sensitivityResults = response.data.results;
+      const response = await mcp.testCorrectionSensitivity({ text: customText });
+      if (response?.success && response.data) {
+        customResults = response.data;
+      } else if (response?.data) {
+        // Handle legacy response format
+        customResults = response.data;
       }
     } catch (error) {
-      console.error('Failed to test sensitivity:', error);
-    } finally {
-      isRunning = false;
+      console.error('Failed to test custom text:', error);
     }
   }
 
-  function getScoreColor(score: number): string {
-    if (score >= 80) return 'text-green-300';
-    if (score >= 60) return 'text-yellow-300';
-    return 'text-red-300';
-  }
-
-  function getPassedColor(passed: boolean): string {
-    return passed ? 'text-green-300' : 'text-red-300';
-  }
+  onMount(() => {
+    checkBackendConnection().then(() => {
+      if (isConnected) {
+        loadTestSuites();
+      }
+    });
+  });
 </script>
 
-<div class="p-6 space-y-6">
-  <div class="glass rounded-2xl p-6">
-    <h2 class="text-2xl font-bold text-white mb-4">Voice Processing Test Suite</h2>
-    
-    <!-- Test Suite Selection -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-      <div>
-        <label class="block text-sm font-medium text-white/80 mb-2">Select Test Suite</label>
-        <select 
-          bind:value={selectedSuite}
-          class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white"
-        >
-          <option value="">Choose a test suite...</option>
-          {#each testSuites as suite}
-            <option value={suite.name}>{suite.name} ({suite.testCount} tests)</option>
-          {/each}
-        </select>
-      </div>
-      
-      <div class="flex items-end gap-2">
-        <button
-          class="btn-futuristic btn-primary-futuristic px-4 py-2 hover-lift neon-glow"
-          onclick={runTestSuite}
-          disabled={!selectedSuite || isRunning}
-        >
-          {isRunning ? 'Running...' : 'Run Suite'}
-        </button>
-        
-        <button
-          class="btn-futuristic btn-secondary-futuristic px-4 py-2 hover-lift"
-          onclick={runAllTests}
-          disabled={isRunning}
-        >
-          Run All Tests
-        </button>
-      </div>
+{#if connectionError}
+  <div class="error-banner">
+    <div class="error-content">
+      <h3>Backend Connection Error</h3>
+      <button class="retry-btn" onclick={() => checkBackendConnection()}>Retry</button>
     </div>
+    <p class="error-message">{connectionError}</p>
+  </div>
+{/if}
 
-    <!-- Custom Text Testing -->
-    <div class="border-t border-white/10 pt-6">
-      <button
-        class="text-white/80 hover:text-white transition-colors mb-4"
-        onclick={() => showCustomTest = !showCustomTest}
+{#if !isConnected}
+  <div class="error-banner">
+    <div class="error-content">
+      <h3>Error</h3>
+    </div>
+    <p class="error-message">Failed to connect to backend. Please check if the server is running on the correct port.</p>
+  </div>
+{/if}
+
+<div class="voice-testing-container">
+  <h2>Voice Processing Test Suite</h2>
+  
+  <div class="test-controls">
+    <div class="suite-selector">
+      <label for="suite-select">Select Test Suite</label>
+      <select id="suite-select" bind:value={selectedSuite} disabled={!isConnected}>
+        <option value="">-- Choose a test suite --</option>
+        {#each testSuites as suite}
+          <option value={suite.name}>{suite.name} ({suite.testCount} tests)</option>
+        {/each}
+      </select>
+    </div>
+    
+    <div class="connection-status">
+      {#if isConnected}
+        <span class="status-connected">Backend connected</span>
+      {:else}
+        <span class="status-disconnected">Backend not connected</span>
+      {/if}
+    </div>
+    
+    <div class="test-actions">
+      <button 
+        class="run-suite-btn" 
+        onclick={runTestSuite}
+        disabled={!selectedSuite || !isConnected || isRunningTests}
       >
-        {showCustomTest ? '▼' : '▶'} Custom Text Testing
+        {isRunningTests ? 'Running...' : 'Run Suite'}
       </button>
       
-      {#if showCustomTest}
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-white/80 mb-2">Test Custom Text</label>
-            <textarea
-              bind:value={customText}
-              class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white resize-none"
-              rows="3"
-              placeholder="Enter text to test with different sensitivity levels..."
-            ></textarea>
-          </div>
-          
-          <button
-            class="btn-futuristic btn-primary-futuristic px-4 py-2 hover-lift neon-glow"
-            onclick={testSensitivity}
-            disabled={!customText.trim() || isRunning}
-          >
-            Test Sensitivity Levels
-          </button>
-        </div>
-      {/if}
+      <button 
+        class="run-all-btn" 
+        onclick={runAllTests}
+        disabled={!isConnected || isRunningTests}
+      >
+        Run All Tests
+      </button>
     </div>
   </div>
 
-  <!-- Sensitivity Test Results -->
-  {#if sensitivityResults.length > 0}
-    <div class="glass rounded-2xl p-6">
-      <h3 class="text-xl font-bold text-white mb-4">Sensitivity Level Comparison</h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {#each sensitivityResults as result}
-          <div class="bg-white/5 rounded-lg p-4 border border-white/10">
-            <div class="flex items-center justify-between mb-2">
-              <span class="font-medium text-white capitalize">{result.sensitivity}</span>
-              <span class="text-xs text-white/60">{result.processingTime}ms</span>
-            </div>
-            
-            <div class="text-sm text-white/80 mb-2">
-              {result.correctionCount} corrections
-            </div>
-            
-            <VoiceCorrectionDisplay
-              originalText={result.original}
-              correctedText={result.corrected}
-              corrections={result.corrections}
-              confidence={result.confidence}
-              showDiff={true}
-            />
-          </div>
-        {/each}
-      </div>
-    </div>
-  {/if}
-
-  <!-- Test Results -->
-  {#if testResults.length > 0}
-    <div class="glass rounded-2xl p-6">
-      <h3 class="text-xl font-bold text-white mb-4">Test Results</h3>
+  <details class="custom-testing">
+    <summary>▶ Custom Text Testing</summary>
+    <div class="custom-form">
+      <textarea 
+        bind:value={customText} 
+        placeholder="Enter text to test voice processing corrections..."
+        rows="3"
+      ></textarea>
       
-      <!-- Summary -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white/5 rounded-lg p-3 text-center">
-          <div class="text-2xl font-bold text-white">{testResults.length}</div>
-          <div class="text-xs text-white/60">Total Tests</div>
+      <div class="custom-controls">
+        <select bind:value={customSensitivity}>
+          <option value="low">Low Sensitivity</option>
+          <option value="medium">Medium Sensitivity</option>
+          <option value="high">High Sensitivity</option>
+        </select>
+        
+        <button 
+          onclick={testCustomText}
+          disabled={!customText.trim() || !isConnected}
+        >
+          Test Text
+        </button>
+      </div>
+      
+      {#if customResults}
+        <div class="custom-results">
+          <h4>Sensitivity Comparison Results</h4>
+          {#each customResults.results as result}
+            <div class="sensitivity-result">
+              <h5>{result.sensitivity.toUpperCase()} Sensitivity</h5>
+              <VoiceCorrectionDisplay 
+                originalText={result.original}
+                correctedText={result.corrected}
+                corrections={result.corrections}
+                confidence={result.confidence}
+              />
+            </div>
+          {/each}
         </div>
-        <div class="bg-white/5 rounded-lg p-3 text-center">
-          <div class="text-2xl font-bold text-green-300">{testResults.filter(r => r.passed).length}</div>
-          <div class="text-xs text-white/60">Passed</div>
+      {/if}
+    </div>
+  </details>
+
+  {#if testResults.length > 0}
+    <div class="test-results">
+      <h3>Test Results ({testResults.length} tests)</h3>
+      
+      <div class="results-summary">
+        <div class="summary-stat">
+          <span class="stat-label">Passed:</span>
+          <span class="stat-value passed">{testResults.filter(r => r.passed).length}</span>
         </div>
-        <div class="bg-white/5 rounded-lg p-3 text-center">
-          <div class="text-2xl font-bold text-red-300">{testResults.filter(r => !r.passed).length}</div>
-          <div class="text-xs text-white/60">Failed</div>
+        <div class="summary-stat">
+          <span class="stat-label">Failed:</span>
+          <span class="stat-value failed">{testResults.filter(r => !r.passed).length}</span>
         </div>
-        <div class="bg-white/5 rounded-lg p-3 text-center">
-          <div class="text-2xl font-bold text-white">
-            {Math.round((testResults.filter(r => r.passed).length / testResults.length) * 100)}%
-          </div>
-          <div class="text-xs text-white/60">Pass Rate</div>
+        <div class="summary-stat">
+          <span class="stat-label">Pass Rate:</span>
+          <span class="stat-value">{Math.round((testResults.filter(r => r.passed).length / testResults.length) * 100)}%</span>
         </div>
       </div>
-
-      <!-- Individual Test Results -->
-      <div class="space-y-4 max-h-96 overflow-y-auto custom-scrollbar">
+      
+      <div class="results-list">
         {#each testResults as result}
-          <div class="bg-white/5 rounded-lg p-4 border border-white/10">
-            <div class="flex items-center justify-between mb-2">
-              <div>
-                <span class="font-medium text-white">{result.testCase.name}</span>
-                <span class="text-xs text-white/60 ml-2">({result.testCase.category})</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class={`text-sm font-medium ${getScoreColor(result.score)}`}>
-                  {result.score}/100
-                </span>
-                <span class={`text-sm font-medium ${getPassedColor(result.passed)}`}>
-                  {result.passed ? '✓ PASS' : '✗ FAIL'}
-                </span>
-              </div>
+          <div class="test-result" class:passed={result.passed} class:failed={!result.passed}>
+            <div class="result-header">
+              <h4>{result.testCase.name}</h4>
+              <span class="result-status">{result.passed ? '✅' : '❌'}</span>
             </div>
             
-            <div class="text-sm text-white/70 mb-3">{result.testCase.description}</div>
+            <p class="test-description">{result.testCase.description}</p>
             
-            <VoiceCorrectionDisplay
+            <VoiceCorrectionDisplay 
               originalText={result.testCase.input}
               correctedText={result.result.correctedText}
               corrections={result.result.corrections}
               confidence={result.result.confidence}
-              showDiff={true}
             />
             
+            <div class="result-details">
+              <span class="score">Score: {Math.round(result.score * 100)}%</span>
+              <span class="processing-time">Time: {result.result.processingTime}ms</span>
+              <span class="category">Category: {result.testCase.category}</span>
+            </div>
+            
             {#if result.feedback.length > 0}
-              <div class="mt-3 pt-3 border-t border-white/10">
-                <div class="text-xs text-white/60 mb-1">Feedback:</div>
-                <ul class="text-xs text-white/70 space-y-1">
-                  {#each result.feedback as feedback}
-                    <li class="flex items-start gap-1">
-                      <span class={feedback.startsWith('✓') ? 'text-green-300' : feedback.startsWith('✗') ? 'text-red-300' : 'text-white/60'}>
-                        {feedback}
-                      </span>
-                    </li>
+              <div class="feedback">
+                <h5>Feedback:</h5>
+                <ul>
+                  {#each result.feedback as item}
+                    <li>{item}</li>
                   {/each}
                 </ul>
               </div>
@@ -290,55 +323,159 @@
 </div>
 
 <style>
-  .btn-futuristic {
-    @apply relative rounded-lg border transition-all duration-300 flex items-center justify-center;
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  .error-banner {
+    @apply glass rounded-2xl p-4 border border-red-400/30 bg-red-500/10 mb-4;
   }
 
-  .btn-primary-futuristic {
-    @apply bg-blue-500/20 border-blue-400/30 text-blue-300;
+  .error-content {
+    @apply flex items-center justify-between;
   }
 
-  .btn-primary-futuristic:hover {
-    @apply bg-blue-500/30 border-blue-400/50 text-blue-200;
+  .error-message {
+    @apply text-red-200/70 text-sm mt-2;
   }
 
-  .btn-secondary-futuristic {
-    @apply bg-white/5 border-white/20 text-white/80;
+  .retry-btn {
+    @apply px-3 py-1 text-sm bg-white/5 border border-white/20 text-white/80 rounded-lg transition-all duration-300;
   }
 
-  .btn-secondary-futuristic:hover {
+  .retry-btn:hover {
     @apply bg-white/10 border-white/30 text-white/90;
   }
 
-  .hover-lift:hover {
-    transform: translateY(-1px) translateZ(0);
+  .voice-testing-container {
+    @apply p-6 space-y-6;
   }
 
-  .neon-glow:hover {
+  .test-controls {
+    @apply grid grid-cols-1 md:grid-cols-2 gap-4 mb-6;
+  }
+
+  .suite-selector {
+    @apply w-full;
+  }
+
+  .connection-status {
+    @apply flex items-center;
+  }
+
+  .status-connected {
+    @apply text-green-300;
+  }
+
+  .status-disconnected {
+    @apply text-red-300;
+  }
+
+  .test-actions {
+    @apply flex items-center gap-2;
+  }
+
+  .run-suite-btn {
+    @apply px-4 py-2 bg-blue-500/20 border border-blue-400/30 text-blue-300 rounded-lg transition-all duration-300;
+  }
+
+  .run-suite-btn:hover {
+    @apply bg-blue-500/30 border-blue-400/50 text-blue-200 transform -translate-y-px;
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
   }
 
-  .custom-scrollbar {
+  .run-all-btn {
+    @apply px-4 py-2 bg-white/5 border border-white/20 text-white/80 rounded-lg transition-all duration-300;
+  }
+
+  .run-all-btn:hover {
+    @apply bg-white/10 border-white/30 text-white/90 transform -translate-y-px;
+  }
+
+  .custom-testing {
+    @apply border-t border-white/10 pt-6;
+  }
+
+  .custom-form {
+    @apply space-y-4;
+  }
+
+  .custom-controls {
+    @apply flex items-center gap-2;
+  }
+
+  .custom-results {
+    @apply mt-4;
+  }
+
+  .sensitivity-result {
+    @apply bg-white/5 rounded-lg p-4 border border-white/10 mb-4;
+  }
+
+  .test-results {
+    @apply glass rounded-2xl p-6;
+  }
+
+  .results-summary {
+    @apply grid grid-cols-2 md:grid-cols-4 gap-4 mb-6;
+  }
+
+  .summary-stat {
+    @apply bg-white/5 rounded-lg p-3 text-center;
+  }
+
+  .results-list {
+    @apply space-y-4 max-h-96 overflow-y-auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   }
 
-  .custom-scrollbar::-webkit-scrollbar {
+  .results-list::-webkit-scrollbar {
     width: 4px;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-track {
+  .results-list::-webkit-scrollbar-track {
     background: transparent;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb {
+  .results-list::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 2px;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  .results-list::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
+  }
+
+  .test-result {
+    @apply bg-white/5 rounded-lg p-4 border border-white/10;
+  }
+
+  .result-header {
+    @apply flex items-center justify-between mb-2;
+  }
+
+  .result-status {
+    @apply text-sm font-medium;
+  }
+
+  .test-description {
+    @apply text-sm text-white/70 mb-3;
+  }
+
+  .result-details {
+    @apply text-xs text-white/60 space-y-1;
+  }
+
+  .score {
+    @apply font-medium;
+  }
+
+  .processing-time {
+    @apply font-medium;
+  }
+
+  .category {
+    @apply font-medium;
+  }
+
+  .feedback {
+    @apply mt-3 pt-3 border-t border-white/10;
   }
 </style>

@@ -203,52 +203,100 @@ app.post("/rpc", async (request, reply) => {
         break;
       // Voice processing endpoints
       case "processVoiceTranscription":
-        result = await voiceController.processVoiceTranscription(
-          { body: params } as any,
-          { send: (data: any) => data } as any
-        );
+        result = await new Promise((resolve) => {
+          const mockRequest = { body: params };
+          const mockReply = {
+            send: (data: any) => resolve(data),
+            status: (code: number) => ({
+              send: (data: any) => resolve(data),
+            }),
+          };
+          voiceController.processVoiceTranscription(
+            mockRequest as any,
+            mockReply as any
+          );
+        });
         break;
       case "getVoiceStats":
-        result = await voiceController.getVoiceStats(
-          { query: params } as any,
-          { send: (data: any) => data } as any
-        );
+        result = await new Promise((resolve) => {
+          const mockRequest = { query: params || {} };
+          const mockReply = {
+            send: (data: any) => resolve(data),
+            status: (code: number) => ({
+              send: (data: any) => resolve(data),
+            }),
+          };
+          voiceController.getVoiceStats(mockRequest as any, mockReply as any);
+        });
         break;
       case "clearVoiceCache":
-        result = await voiceController.clearVoiceCache(
-          {} as any,
-          { send: (data: any) => data } as any
-        );
+        result = await new Promise((resolve) => {
+          const mockRequest = {};
+          const mockReply = {
+            send: (data: any) => resolve(data),
+            status: (code: number) => ({
+              send: (data: any) => resolve(data),
+            }),
+          };
+          voiceController.clearVoiceCache(mockRequest as any, mockReply as any);
+        });
         break;
       case "testVoiceProcessing":
-        result = await voiceController.testVoiceProcessing(
-          {} as any,
-          { send: (data: any) => data } as any
-        );
+        result = await new Promise((resolve) => {
+          const mockRequest = {};
+          const mockReply = {
+            send: (data: any) => resolve(data),
+            status: (code: number) => ({
+              send: (data: any) => resolve(data),
+            }),
+          };
+          voiceController.testVoiceProcessing(
+            mockRequest as any,
+            mockReply as any
+          );
+        });
         break;
       case "getSupportedLanguages":
-        result = await voiceController.getSupportedLanguages(
-          {} as any,
-          { send: (data: any) => data } as any
-        );
+        result = await new Promise((resolve) => {
+          const mockRequest = {};
+          const mockReply = {
+            send: (data: any) => resolve(data),
+            status: (code: number) => ({
+              send: (data: any) => resolve(data),
+            }),
+          };
+          voiceController.getSupportedLanguages(
+            mockRequest as any,
+            mockReply as any
+          );
+        });
         break;
       case "runTestSuite":
-        result = await voiceController.runTestSuite(
-          { query: params } as any,
-          {
-            send: (data: any) => data,
-            status: (code: number) => ({ send: (data: any) => data }),
-          } as any
-        );
+        result = await new Promise((resolve) => {
+          const mockRequest = { query: params || {} };
+          const mockReply = {
+            send: (data: any) => resolve(data),
+            status: (code: number) => ({
+              send: (data: any) => resolve(data),
+            }),
+          };
+          voiceController.runTestSuite(mockRequest as any, mockReply as any);
+        });
         break;
       case "testCorrectionSensitivity":
-        result = await voiceController.testCorrectionSensitivity(
-          { body: params } as any,
-          {
-            send: (data: any) => data,
-            status: (code: number) => ({ send: (data: any) => data }),
-          } as any
-        );
+        result = await new Promise((resolve) => {
+          const mockRequest = { body: params };
+          const mockReply = {
+            send: (data: any) => resolve(data),
+            status: (code: number) => ({
+              send: (data: any) => resolve(data),
+            }),
+          };
+          voiceController.testCorrectionSensitivity(
+            mockRequest as any,
+            mockReply as any
+          );
+        });
         break;
       default:
         throw new Error(`Unknown method: ${method}`);
@@ -541,32 +589,27 @@ const start = async () => {
         );
         console.log(`📡 JSON-RPC endpoint: http://localhost:${port}/rpc`);
         console.log(`🏥 Health check: http://localhost:${port}/health`);
-
-        if (port !== 4000) {
-          console.log(`\n⚠️  IMPORTANT: Using non-default port ${port}`);
-          console.log(
-            `   Frontend will auto-discover this port via health check`
-          );
-        }
-
         console.log(`\n✨ Server ready for requests!`);
-        return; // Success!
-      } catch (listenError) {
+        return;
+      } catch (error) {
         console.log(
           `❌ Failed to start server on port ${port}:`,
-          (listenError as Error).message
+          (error as Error).message
         );
+
         if (attempts < maxAttempts) {
-          console.log(`🔄 Retrying...`);
+          console.log(`🔄 Retrying with different approach...`);
           await new Promise((resolve) => setTimeout(resolve, 1000));
+        } else {
+          console.log(`🔍 Finding alternative port...`);
+          port = await findAvailablePort(4000);
+          console.log(`✅ Trying port ${port} instead`);
+          attempts = 0; // Reset attempts for new port
         }
       }
     }
-
-    throw new Error(`Failed to start server after ${maxAttempts} attempts`);
-  } catch (err) {
-    console.log(`\n💥 FATAL ERROR: Could not start server`);
-    app.log.error(err);
+  } catch (error) {
+    console.error("💥 Fatal error starting server:", error);
     process.exit(1);
   }
 };
