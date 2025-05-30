@@ -36,36 +36,88 @@ export interface Snippet {
 class MCPClient {
   private baseUrl: string;
   private requestId = 1;
+  private connectedPort: number | null = null;
 
   constructor(baseUrl: string = "http://localhost:4000/rpc") {
     this.baseUrl = baseUrl;
   }
 
+  private async discoverBackendPort(): Promise<string> {
+    if (this.connectedPort) {
+      return `http://localhost:${this.connectedPort}/rpc`;
+    }
+
+    const portsToTry = [4000, 4001, 4002, 4003, 4004, 4005];
+
+    for (const port of portsToTry) {
+      try {
+        const testUrl = `http://localhost:${port}/health`;
+        const response = await fetch(testUrl, {
+          method: "GET",
+          signal: AbortSignal.timeout(2000),
+        });
+
+        if (response.ok) {
+          this.connectedPort = port;
+          this.baseUrl = `http://localhost:${port}/rpc`;
+          console.log(`✅ Connected to backend on port ${port}`);
+          return this.baseUrl;
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+
+    console.warn("⚠️ Could not find backend, using default port 4000");
+    return "http://localhost:4000/rpc";
+  }
+
   private async call(method: string, params?: any): Promise<any> {
-    const response = await fetch(this.baseUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method,
-        params,
-        id: this.requestId++,
-      }),
-    });
+    let currentUrl = this.baseUrl;
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+      const response = await fetch(currentUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method,
+          params,
+          id: this.requestId++,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error.message || "RPC Error");
+      }
+
+      return data.result;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message.includes("Failed to fetch") ||
+          error.message.includes("HTTP error"))
+      ) {
+        console.log(
+          "🔍 Connection failed, attempting to discover backend port..."
+        );
+        currentUrl = await this.discoverBackendPort();
+
+        if (currentUrl !== this.baseUrl) {
+          this.baseUrl = currentUrl;
+          return this.call(method, params);
+        }
+      }
+      throw error;
     }
-
-    const data = await response.json();
-
-    if (data.error) {
-      throw new Error(data.error.message || "RPC Error");
-    }
-
-    return data.result;
   }
 
   // Todo methods
@@ -141,7 +193,15 @@ class MCPClient {
     conversationId?: number;
     provider?: string;
     model?: string;
-  }): Promise<{ message: ChatMessage; success: boolean }> {
+  }): Promise<{
+    message: ChatMessage & {
+      webSearchUsed?: boolean;
+      mathComputationUsed?: boolean;
+    };
+    success: boolean;
+    webSearchUsed?: boolean;
+    mathComputationUsed?: boolean;
+  }> {
     return this.call("chat", params);
   }
 
@@ -154,6 +214,13 @@ class MCPClient {
 
   async refreshOllamaModels(): Promise<{ success: boolean }> {
     return this.call("refreshOllamaModels");
+  }
+
+  async getSavedPreferences(): Promise<{
+    preferences: { provider: string | null; model: string | null };
+    success: boolean;
+  }> {
+    return this.call("getSavedPreferences");
   }
 
   // Conversation methods
@@ -187,6 +254,175 @@ class MCPClient {
     id: number;
   }): Promise<{ success: boolean }> {
     return this.call("deleteConversation", params);
+  }
+
+  // Memory methods
+  async searchMemories(params: {
+    userId: string;
+    query: string;
+    type?: string;
+    limit?: number;
+  }): Promise<{ memories: any[]; success: boolean }> {
+    return this.call("searchMemories", params);
+  }
+
+  async getUserInsights(params: {
+    userId: string;
+  }): Promise<{ insights: any; success: boolean }> {
+    return this.call("getUserInsights", params);
+  }
+
+  async getEpisodicTimeline(params: {
+    userId: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }): Promise<{ timeline: any[]; success: boolean }> {
+    return this.call("getEpisodicTimeline", params);
+  }
+
+  async getUserPreferences(params: {
+    userId: string;
+  }): Promise<{ preferences: any[]; success: boolean }> {
+    return this.call("getUserPreferences", params);
+  }
+
+  // Additional memory methods
+  async remember(params: {
+    input: string;
+    context: any;
+    type?: string;
+    importance?: number;
+  }): Promise<{ success: boolean; memoryId?: string; error?: string }> {
+    return this.call("remember", params);
+  }
+
+  async addConversationMessage(params: {
+    conversationId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    timestamp?: Date;
+  }): Promise<{ success: boolean; error?: string }> {
+    return this.call("addConversationMessage", params);
+  }
+
+  async recordEpisode(params: {
+    event: string;
+    outcome: string;
+    participants?: string[];
+    emotions?: string[];
+    success?: boolean;
+    context: any;
+  }): Promise<{ success: boolean; memoryId?: string; error?: string }> {
+    return this.call("recordEpisode", params);
+  }
+
+  async addConcept(params: {
+    concept: string;
+    description: string;
+  }): Promise<{ success: boolean; memoryId?: string; error?: string }> {
+    return this.call("addConcept", params);
+  }
+
+  async adaptToUser(params: {
+    userId: string;
+    context?: string;
+  }): Promise<{ success: boolean; adaptation?: string; error?: string }> {
+    return this.call("adaptToUser", params);
+  }
+
+  async getMemoryStats(params: {
+    userId?: string;
+  }): Promise<{ success: boolean; stats?: any; error?: string }> {
+    return this.call("getMemoryStats", params);
+  }
+
+  async recall(params: {
+    query: string;
+    context: any;
+    maxResults?: number;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("recall", params);
+  }
+
+  async getMemoryContext(params: {
+    conversationId: string;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("getMemoryContext", params);
+  }
+
+  async optimizeMemory(): Promise<{ success: boolean; error?: string }> {
+    return this.call("optimizeMemory");
+  }
+
+  async predictOutcome(params: {
+    scenario: string;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("predictOutcome", params);
+  }
+
+  async findRelatedConcepts(params: {
+    concept: string;
+    maxDepth?: number;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("findRelatedConcepts", params);
+  }
+
+  async verifyFact(params: {
+    statement: string;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("verifyFact", params);
+  }
+
+  async getConversationSummary(params: {
+    conversationId: string;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("getConversationSummary", params);
+  }
+
+  async findSimilarMemories(params: {
+    content: string;
+    threshold?: number;
+    limit?: number;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("findSimilarMemories", params);
+  }
+
+  // Voice processing methods
+  async processVoiceTranscription(params: {
+    originalText: string;
+    context?: string;
+    options?: any;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("processVoiceTranscription", params);
+  }
+
+  async getVoiceStats(): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    return this.call("getVoiceStats", {});
+  }
+
+  async clearVoiceCache(): Promise<{ success: boolean; error?: string }> {
+    return this.call("clearVoiceCache", {});
+  }
+
+  async testVoiceProcessing(): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    return this.call("testVoiceProcessing", {});
+  }
+
+  async getSupportedLanguages(): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    return this.call("getSupportedLanguages", {});
   }
 }
 

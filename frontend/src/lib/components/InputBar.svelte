@@ -84,6 +84,14 @@
         onTranscription={handleVoiceTranscription}
         onError={handleVoiceError}
         disabled={isDisabled}
+        enableAICorrection={true}
+        correctionOptions={{
+          enableGrammarCorrection: true,
+          enableContextCorrection: true,
+          correctionSensitivity: 'medium',
+          autoApplyCorrections: false,
+          preserveUserIntent: true
+        }}
       />
 
       <!-- Send Button -->

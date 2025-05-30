@@ -1,15 +1,37 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { voiceInputService } from '$lib/services/voiceInputService';
-  import type { VoiceInputState, VoiceTranscriptionResult, VoiceInputError } from '$lib/types/voiceInput';
+  import { voiceProcessingService } from '$lib/services/voiceProcessingService';
+  import VoiceCorrectionDisplay from './VoiceCorrectionDisplay.svelte';
+  import type {
+    VoiceInputState,
+    VoiceTranscriptionResult,
+    VoiceInputError,
+    VoiceCorrection,
+    VoiceProcessingOptions
+  } from '$lib/types/voiceInput';
 
   interface Props {
     onTranscription?: (text: string) => void;
     onError?: (error: string) => void;
     disabled?: boolean;
+    enableAICorrection?: boolean;
+    correctionOptions?: VoiceProcessingOptions;
   }
 
-  let { onTranscription, onError, disabled = false }: Props = $props();
+  let {
+    onTranscription,
+    onError,
+    disabled = false,
+    enableAICorrection = true,
+    correctionOptions = {
+      enableGrammarCorrection: true,
+      enableContextCorrection: true,
+      correctionSensitivity: 'medium',
+      autoApplyCorrections: false,
+      preserveUserIntent: true
+    }
+  }: Props = $props();
 
   let voiceState: VoiceInputState = $state({
     isRecording: false,
@@ -25,6 +47,13 @@
 
   let showTranscript = $state(false);
   let transcriptTimeout: NodeJS.Timeout | null = null;
+
+  // AI Processing state
+  let isProcessingAI = $state(false);
+  let correctedText = $state('');
+  let corrections: VoiceCorrection[] = $state([]);
+  let processingConfidence = $state(0);
+  let showCorrections = $state(false);
 
   // Subscribe to voice service state
   const unsubscribe = voiceInputService.state.subscribe((state) => {
@@ -72,10 +101,67 @@
     }
   });
 
-  function handleTranscriptionResult(result: VoiceTranscriptionResult) {
+  async function handleTranscriptionResult(result: VoiceTranscriptionResult) {
     if (result.isFinal && result.originalText.trim()) {
-      onTranscription?.(result.originalText.trim());
+      const finalText = result.originalText.trim();
+
+      if (enableAICorrection) {
+        // Process with AI for corrections
+        await processWithAI(finalText);
+      } else {
+        // Use original text directly
+        onTranscription?.(finalText);
+      }
     }
+  }
+
+  async function processWithAI(text: string) {
+    try {
+      isProcessingAI = true;
+      showCorrections = false;
+
+      const response = await voiceProcessingService.processTranscription({
+        originalText: text,
+        options: correctionOptions
+      });
+
+      if (response.success) {
+        correctedText = response.correctedText;
+        corrections = response.corrections;
+        processingConfidence = response.confidence;
+
+        if (correctionOptions.autoApplyCorrections || corrections.length === 0) {
+          // Auto-apply or no corrections needed
+          onTranscription?.(correctedText);
+        } else {
+          // Show corrections for user review
+          showCorrections = true;
+        }
+      } else {
+        // Fallback to original text on AI processing failure
+        onTranscription?.(text);
+        onError?.(`AI processing failed: ${response.error}`);
+      }
+    } catch (error: any) {
+      // Fallback to original text on error
+      onTranscription?.(text);
+      onError?.(`AI processing error: ${error.message}`);
+    } finally {
+      isProcessingAI = false;
+    }
+  }
+
+  function handleAcceptCorrections(acceptedText: string) {
+    onTranscription?.(acceptedText);
+    showCorrections = false;
+  }
+
+  function handleRejectCorrections() {
+    // Use original transcript
+    if (voiceState.finalTranscript) {
+      onTranscription?.(voiceState.finalTranscript);
+    }
+    showCorrections = false;
   }
 
   function handleVoiceError(error: VoiceInputError) {
@@ -153,7 +239,7 @@
     aria-label={voiceState.isRecording ? 'Stop voice recording' : 'Start voice recording'}
     aria-pressed={voiceState.isRecording}
   >
-    {#if voiceState.isProcessing}
+    {#if voiceState.isProcessing || isProcessingAI}
       <!-- Processing indicator -->
       <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
     {:else if voiceState.isRecording}
@@ -199,6 +285,14 @@
         {/if}
       </div>
 
+      <!-- AI Processing indicator -->
+      {#if isProcessingAI}
+        <div class="flex items-center gap-1 mt-2">
+          <div class="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+          <span class="text-xs text-blue-300">AI Processing...</span>
+        </div>
+      {/if}
+
       <!-- Visual recording indicator -->
       {#if voiceState.isRecording}
         <div class="flex items-center gap-1 mt-2">
@@ -206,6 +300,21 @@
           <span class="text-xs text-red-300">Recording</span>
         </div>
       {/if}
+    </div>
+  {/if}
+
+  <!-- AI Correction Display -->
+  {#if showCorrections && corrections.length > 0}
+    <div class="absolute bottom-full mb-2 left-0 right-0 max-w-md">
+      <VoiceCorrectionDisplay
+        originalText={voiceState.finalTranscript}
+        {correctedText}
+        {corrections}
+        confidence={processingConfidence}
+        onAccept={handleAcceptCorrections}
+        onReject={handleRejectCorrections}
+        showDiff={true}
+      />
     </div>
   {/if}
 
