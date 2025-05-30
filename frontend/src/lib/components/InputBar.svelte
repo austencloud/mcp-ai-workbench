@@ -1,4 +1,6 @@
 <script lang="ts">
+  import VoiceInputButton from './VoiceInputButton.svelte';
+
   interface Props {
     onsend?: (message: string) => void;
   }
@@ -7,6 +9,7 @@
 
   let message = $state('');
   let isDisabled = $state(false);
+  let textareaElement: HTMLTextAreaElement;
 
   function sendMessage() {
     const trimmedMessage = message.trim();
@@ -14,6 +17,11 @@
 
     onsend?.(trimmedMessage);
     message = '';
+
+    // Reset textarea height
+    if (textareaElement) {
+      textareaElement.style.height = 'auto';
+    }
   }
 
   function handleKeyPress(event: KeyboardEvent) {
@@ -21,6 +29,29 @@
       event.preventDefault();
       sendMessage();
     }
+  }
+
+  function handleVoiceTranscription(text: string) {
+    // Append voice transcription to current message
+    if (message.trim()) {
+      message += ' ' + text;
+    } else {
+      message = text;
+    }
+
+    // Auto-resize textarea
+    if (textareaElement) {
+      textareaElement.style.height = 'auto';
+      textareaElement.style.height = Math.min(textareaElement.scrollHeight, 128) + 'px';
+    }
+
+    // Focus textarea for continued typing
+    textareaElement?.focus();
+  }
+
+  function handleVoiceError(error: string) {
+    console.warn('Voice input error:', error);
+    // Could show a toast notification here in the future
   }
 
   // Allow parent to disable input
@@ -33,8 +64,9 @@
   <div class="glass rounded-2xl p-4">
     <div class="flex gap-3 items-end">
       <textarea
+        bind:this={textareaElement}
         class="flex-1 bg-white/5 text-high-contrast placeholder-white/70 border-none outline-none resize-none rounded-lg px-3 py-2"
-        placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+        placeholder="Type your message or use voice input... (Enter to send, Shift+Enter for new line, Ctrl+Shift+V for voice)"
         rows="1"
         bind:value={message}
         onkeydown={handleKeyPress}
@@ -47,10 +79,19 @@
         }}
       ></textarea>
 
+      <!-- Voice Input Button -->
+      <VoiceInputButton
+        onTranscription={handleVoiceTranscription}
+        onError={handleVoiceError}
+        disabled={isDisabled}
+      />
+
+      <!-- Send Button -->
       <button
         class="btn-futuristic btn-primary-futuristic p-3 hover-lift neon-glow flex-shrink-0"
         onclick={sendMessage}
         disabled={!message.trim() || isDisabled}
+        aria-label="Send message"
       >
         {#if isDisabled}
           <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
