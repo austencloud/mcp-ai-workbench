@@ -1,8 +1,11 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
-import { VoiceProcessingService } from '../services/voiceProcessingService';
-import { AIProviderService } from '../services/aiProviderService';
-import type { VoiceProcessingRequest, VoiceProcessingResponse } from '../services/voiceProcessingService';
-import type { VoiceProfile, VoiceProcessingOptions } from '../types/voiceInput';
+import { FastifyRequest, FastifyReply } from "fastify";
+import { VoiceProcessingService } from "../services/voiceProcessingService";
+import { AIProviderService } from "../services/aiProviderService";
+import type {
+  VoiceProcessingRequest,
+  VoiceProcessingResponse,
+} from "../services/voiceProcessingService";
+import type { VoiceProfile, VoiceProcessingOptions } from "../types/voiceInput";
 
 // Initialize services
 const aiProvider = new AIProviderService();
@@ -41,17 +44,17 @@ export async function processVoiceTranscription(
     const { originalText, context, options, userProfile } = request.body;
 
     // Validate input
-    if (!originalText || typeof originalText !== 'string') {
+    if (!originalText || typeof originalText !== "string") {
       return reply.status(400).send({
         success: false,
-        error: 'originalText is required and must be a string'
+        error: "originalText is required and must be a string",
       });
     }
 
     if (originalText.length > 5000) {
       return reply.status(400).send({
         success: false,
-        error: 'Text too long. Maximum 5000 characters allowed.'
+        error: "Text too long. Maximum 5000 characters allowed.",
       });
     }
 
@@ -63,26 +66,27 @@ export async function processVoiceTranscription(
       options: {
         enableGrammarCorrection: true,
         enableContextCorrection: true,
-        correctionSensitivity: 'medium',
+        correctionSensitivity: "medium",
         autoApplyCorrections: false,
         preserveUserIntent: true,
-        ...options
-      }
+        ...options,
+      },
     };
 
-    const result = await voiceProcessor.processVoiceTranscription(processingRequest);
+    const result = await voiceProcessor.processVoiceTranscription(
+      processingRequest
+    );
 
     reply.send({
       success: result.success,
       data: result,
-      error: result.error
+      error: result.error,
     });
-
   } catch (error: any) {
-    console.error('Voice processing error:', error);
+    console.error("Voice processing error:", error);
     reply.status(500).send({
       success: false,
-      error: 'Internal server error during voice processing'
+      error: "Internal server error during voice processing",
     });
   }
 }
@@ -102,26 +106,34 @@ export async function getVoiceStats(
       success: true,
       data: {
         cache: cacheStats,
-        providers: availableProviders.providers,
+        providers: availableProviders,
         supportedLanguages: [
-          'en-US', 'en-GB', 'es-ES', 'fr-FR', 'de-DE', 
-          'it-IT', 'pt-BR', 'ru-RU', 'ja-JP', 'ko-KR', 'zh-CN'
+          "en-US",
+          "en-GB",
+          "es-ES",
+          "fr-FR",
+          "de-DE",
+          "it-IT",
+          "pt-BR",
+          "ru-RU",
+          "ja-JP",
+          "ko-KR",
+          "zh-CN",
         ],
         features: {
           grammarCorrection: true,
           contextCorrection: true,
           realTimeProcessing: true,
           multiProvider: true,
-          caching: true
-        }
-      }
+          caching: true,
+        },
+      },
     });
-
   } catch (error: any) {
-    console.error('Voice stats error:', error);
+    console.error("Voice stats error:", error);
     reply.status(500).send({
       success: false,
-      error: 'Failed to retrieve voice processing statistics'
+      error: "Failed to retrieve voice processing statistics",
     });
   }
 }
@@ -135,17 +147,16 @@ export async function clearVoiceCache(
 ): Promise<void> {
   try {
     voiceProcessor.clearCache();
-    
+
     reply.send({
       success: true,
-      message: 'Voice processing cache cleared successfully'
+      message: "Voice processing cache cleared successfully",
     });
-
   } catch (error: any) {
-    console.error('Clear cache error:', error);
+    console.error("Clear cache error:", error);
     reply.status(500).send({
       success: false,
-      error: 'Failed to clear voice processing cache'
+      error: "Failed to clear voice processing cache",
     });
   }
 }
@@ -162,7 +173,7 @@ export async function testVoiceProcessing(
       "hello world this is a test",
       "can you help me with this problem",
       "i need to send an email to my boss about the meeting tomorrow",
-      "whats the weather like today"
+      "whats the weather like today",
     ];
 
     const results = [];
@@ -173,10 +184,10 @@ export async function testVoiceProcessing(
         options: {
           enableGrammarCorrection: true,
           enableContextCorrection: true,
-          correctionSensitivity: 'medium',
+          correctionSensitivity: "medium",
           autoApplyCorrections: false,
-          preserveUserIntent: true
-        }
+          preserveUserIntent: true,
+        },
       });
 
       results.push({
@@ -185,7 +196,7 @@ export async function testVoiceProcessing(
         corrections: result.corrections,
         confidence: result.confidence,
         processingTime: result.processingTime,
-        success: result.success
+        success: result.success,
       });
     }
 
@@ -195,18 +206,20 @@ export async function testVoiceProcessing(
         testResults: results,
         summary: {
           totalTests: results.length,
-          successfulTests: results.filter(r => r.success).length,
-          averageProcessingTime: results.reduce((sum, r) => sum + r.processingTime, 0) / results.length,
-          averageConfidence: results.reduce((sum, r) => sum + r.confidence, 0) / results.length
-        }
-      }
+          successfulTests: results.filter((r) => r.success).length,
+          averageProcessingTime:
+            results.reduce((sum, r) => sum + r.processingTime, 0) /
+            results.length,
+          averageConfidence:
+            results.reduce((sum, r) => sum + r.confidence, 0) / results.length,
+        },
+      },
     });
-
   } catch (error: any) {
-    console.error('Voice test error:', error);
+    console.error("Voice test error:", error);
     reply.status(500).send({
       success: false,
-      error: 'Failed to run voice processing test'
+      error: "Failed to run voice processing test",
     });
   }
 }
@@ -220,37 +233,36 @@ export async function getSupportedLanguages(
 ): Promise<void> {
   try {
     const languages = [
-      { code: 'en-US', name: 'English (US)', flag: '🇺🇸' },
-      { code: 'en-GB', name: 'English (UK)', flag: '🇬🇧' },
-      { code: 'es-ES', name: 'Spanish (Spain)', flag: '🇪🇸' },
-      { code: 'es-MX', name: 'Spanish (Mexico)', flag: '🇲🇽' },
-      { code: 'fr-FR', name: 'French (France)', flag: '🇫🇷' },
-      { code: 'de-DE', name: 'German (Germany)', flag: '🇩🇪' },
-      { code: 'it-IT', name: 'Italian (Italy)', flag: '🇮🇹' },
-      { code: 'pt-BR', name: 'Portuguese (Brazil)', flag: '🇧🇷' },
-      { code: 'ru-RU', name: 'Russian (Russia)', flag: '🇷🇺' },
-      { code: 'ja-JP', name: 'Japanese (Japan)', flag: '🇯🇵' },
-      { code: 'ko-KR', name: 'Korean (South Korea)', flag: '🇰🇷' },
-      { code: 'zh-CN', name: 'Chinese (Simplified)', flag: '🇨🇳' },
-      { code: 'zh-TW', name: 'Chinese (Traditional)', flag: '🇹🇼' },
-      { code: 'ar-SA', name: 'Arabic (Saudi Arabia)', flag: '🇸🇦' },
-      { code: 'hi-IN', name: 'Hindi (India)', flag: '🇮🇳' }
+      { code: "en-US", name: "English (US)", flag: "🇺🇸" },
+      { code: "en-GB", name: "English (UK)", flag: "🇬🇧" },
+      { code: "es-ES", name: "Spanish (Spain)", flag: "🇪🇸" },
+      { code: "es-MX", name: "Spanish (Mexico)", flag: "🇲🇽" },
+      { code: "fr-FR", name: "French (France)", flag: "🇫🇷" },
+      { code: "de-DE", name: "German (Germany)", flag: "🇩🇪" },
+      { code: "it-IT", name: "Italian (Italy)", flag: "🇮🇹" },
+      { code: "pt-BR", name: "Portuguese (Brazil)", flag: "🇧🇷" },
+      { code: "ru-RU", name: "Russian (Russia)", flag: "🇷🇺" },
+      { code: "ja-JP", name: "Japanese (Japan)", flag: "🇯🇵" },
+      { code: "ko-KR", name: "Korean (South Korea)", flag: "🇰🇷" },
+      { code: "zh-CN", name: "Chinese (Simplified)", flag: "🇨🇳" },
+      { code: "zh-TW", name: "Chinese (Traditional)", flag: "🇹🇼" },
+      { code: "ar-SA", name: "Arabic (Saudi Arabia)", flag: "🇸🇦" },
+      { code: "hi-IN", name: "Hindi (India)", flag: "🇮🇳" },
     ];
 
     reply.send({
       success: true,
       data: {
         languages,
-        defaultLanguage: 'en-US',
-        autoDetection: false // Web Speech API doesn't support auto-detection
-      }
+        defaultLanguage: "en-US",
+        autoDetection: false, // Web Speech API doesn't support auto-detection
+      },
     });
-
   } catch (error: any) {
-    console.error('Languages error:', error);
+    console.error("Languages error:", error);
     reply.status(500).send({
       success: false,
-      error: 'Failed to retrieve supported languages'
+      error: "Failed to retrieve supported languages",
     });
   }
 }

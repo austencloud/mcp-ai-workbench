@@ -1,12 +1,12 @@
-import { AIProviderService } from './aiProviderService';
-import type { ChatMessage } from './aiProviderService';
+import { AIProviderService } from "./aiProviderService";
+import type { ChatMessage } from "./aiProviderService";
 import type {
   VoiceTranscriptionResult,
   VoiceCorrection,
   VoiceProcessingOptions,
   VoiceProfile,
-  CorrectionHistory
-} from '../types/voiceInput';
+  CorrectionHistory,
+} from "../types/voiceInput";
 
 export interface VoiceProcessingRequest {
   originalText: string;
@@ -38,9 +38,11 @@ export class VoiceProcessingService {
   /**
    * Process voice transcription with AI-powered text enhancement
    */
-  async processVoiceTranscription(request: VoiceProcessingRequest): Promise<VoiceProcessingResponse> {
+  async processVoiceTranscription(
+    request: VoiceProcessingRequest
+  ): Promise<VoiceProcessingResponse> {
     const startTime = Date.now();
-    
+
     try {
       // Check cache first
       const cacheKey = this.generateCacheKey(request);
@@ -52,21 +54,21 @@ export class VoiceProcessingService {
       // Validate input
       if (!request.originalText?.trim()) {
         return {
-          correctedText: request.originalText || '',
+          correctedText: request.originalText || "",
           corrections: [],
           confidence: 0,
           processingTime: Date.now() - startTime,
           success: false,
-          error: 'Empty text provided'
+          error: "Empty text provided",
         };
       }
 
       // Build correction prompt based on options
       const prompt = this.buildCorrectionPrompt(request);
-      
+
       // Get AI correction
       const aiResponse = await this.getAICorrection(prompt, request.options);
-      
+
       if (!aiResponse.success) {
         return {
           correctedText: request.originalText,
@@ -74,24 +76,26 @@ export class VoiceProcessingService {
           confidence: 0,
           processingTime: Date.now() - startTime,
           success: false,
-          error: aiResponse.error || 'AI processing failed'
+          error: aiResponse.error || "AI processing failed",
         };
       }
 
       // Parse AI response
-      const result = this.parseAIResponse(aiResponse.message.content, request.originalText);
-      
+      const result = this.parseAIResponse(
+        aiResponse.message.content,
+        request.originalText
+      );
+
       // Cache successful result
       const response: VoiceProcessingResponse = {
         ...result,
         processingTime: Date.now() - startTime,
         aiProvider: aiResponse.provider,
-        success: true
+        success: true,
       };
 
       this.cacheResult(cacheKey, response);
       return response;
-
     } catch (error: any) {
       return {
         correctedText: request.originalText,
@@ -99,7 +103,7 @@ export class VoiceProcessingService {
         confidence: 0,
         processingTime: Date.now() - startTime,
         success: false,
-        error: error.message || 'Unknown processing error'
+        error: error.message || "Unknown processing error",
       };
     }
   }
@@ -109,7 +113,7 @@ export class VoiceProcessingService {
    */
   private buildCorrectionPrompt(request: VoiceProcessingRequest): string {
     const { originalText, context, userProfile, options } = request;
-    
+
     let prompt = `Please correct the following voice transcription for grammar, spelling, and clarity while preserving the original meaning and intent:\n\n`;
     prompt += `Original text: "${originalText}"\n\n`;
 
@@ -118,15 +122,18 @@ export class VoiceProcessingService {
     }
 
     if (userProfile?.vocabularyPreferences?.length) {
-      const vocab = userProfile.vocabularyPreferences.slice(0, 10).map(v => `"${v.term}" -> "${v.preferredForm}"`).join(', ');
+      const vocab = userProfile.vocabularyPreferences
+        .slice(0, 10)
+        .map((v) => `"${v.term}" -> "${v.preferredForm}"`)
+        .join(", ");
       prompt += `User vocabulary preferences: ${vocab}\n\n`;
     }
 
     if (options?.correctionSensitivity) {
       const sensitivity = options.correctionSensitivity;
-      if (sensitivity === 'low') {
+      if (sensitivity === "low") {
         prompt += `Apply minimal corrections - only fix obvious errors.\n`;
-      } else if (sensitivity === 'high') {
+      } else if (sensitivity === "high") {
         prompt += `Apply comprehensive corrections for grammar, style, and clarity.\n`;
       } else {
         prompt += `Apply moderate corrections for grammar and spelling.\n`;
@@ -157,29 +164,33 @@ If no corrections are needed, return the original text with an empty corrections
   /**
    * Get AI correction using the multi-provider system
    */
-  private async getAICorrection(prompt: string, options?: VoiceProcessingOptions) {
+  private async getAICorrection(
+    prompt: string,
+    options?: VoiceProcessingOptions
+  ) {
     const messages: ChatMessage[] = [
       {
-        role: 'system',
-        content: 'You are an expert text correction assistant. Provide accurate grammar and spelling corrections while preserving the user\'s original intent and meaning.'
+        role: "system",
+        content:
+          "You are an expert text correction assistant. Provide accurate grammar and spelling corrections while preserving the user's original intent and meaning.",
       },
       {
-        role: 'user',
-        content: prompt
-      }
+        role: "user",
+        content: prompt,
+      },
     ];
 
     // Use fastest available provider for real-time corrections
-    const preferredProviders = ['google', 'deepseek', 'openai', 'anthropic'];
-    
+    const preferredProviders = ["google", "deepseek", "openai", "anthropic"];
+
     for (const provider of preferredProviders) {
       try {
-        const response = await this.aiProvider.chat(messages, { 
+        const response = await this.aiProvider.chat(messages, {
           provider,
           model: this.getOptimalModel(provider),
-          enableWebSearch: false // Disable web search for voice processing
+          enableWebSearch: false, // Disable web search for voice processing
         });
-        
+
         if (response.success) {
           return response;
         }
@@ -198,19 +209,22 @@ If no corrections are needed, return the original text with an empty corrections
    */
   private getOptimalModel(provider: string): string {
     const modelMap: Record<string, string> = {
-      'google': 'gemini-1.5-flash', // Fast and efficient
-      'deepseek': 'deepseek-chat',
-      'openai': 'gpt-4o-mini', // Faster than full GPT-4
-      'anthropic': 'claude-3-haiku-20240307' // Fastest Claude model
+      google: "gemini-1.5-flash", // Fast and efficient
+      deepseek: "deepseek-chat",
+      openai: "gpt-4o-mini", // Faster than full GPT-4
+      anthropic: "claude-3-haiku-20240307", // Fastest Claude model
     };
-    
-    return modelMap[provider] || '';
+
+    return modelMap[provider] || "";
   }
 
   /**
    * Parse AI response and extract corrections
    */
-  private parseAIResponse(content: string, originalText: string): {
+  private parseAIResponse(
+    content: string,
+    originalText: string
+  ): {
     correctedText: string;
     corrections: VoiceCorrection[];
     confidence: number;
@@ -219,24 +233,24 @@ If no corrections are needed, return the original text with an empty corrections
       // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+        throw new Error("No JSON found in response");
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
-      
+
       return {
         correctedText: parsed.correctedText || originalText,
         corrections: this.validateCorrections(parsed.corrections || []),
-        confidence: Math.min(Math.max(parsed.confidence || 0.5, 0), 1)
+        confidence: Math.min(Math.max(parsed.confidence || 0.5, 0), 1),
       };
     } catch (error) {
-      console.warn('Failed to parse AI response:', error);
-      
+      console.warn("Failed to parse AI response:", error);
+
       // Fallback: return original text with no corrections
       return {
         correctedText: originalText,
         corrections: [],
-        confidence: 0.5
+        confidence: 0.5,
       };
     }
   }
@@ -246,24 +260,28 @@ If no corrections are needed, return the original text with an empty corrections
    */
   private validateCorrections(corrections: any[]): VoiceCorrection[] {
     return corrections
-      .filter(c => c && typeof c === 'object')
-      .map(c => ({
-        original: String(c.original || ''),
-        corrected: String(c.corrected || ''),
-        type: ['grammar', 'spelling', 'context', 'punctuation'].includes(c.type) ? c.type : 'grammar',
+      .filter((c) => c && typeof c === "object")
+      .map((c) => ({
+        original: String(c.original || ""),
+        corrected: String(c.corrected || ""),
+        type: ["grammar", "spelling", "context", "punctuation"].includes(c.type)
+          ? c.type
+          : "grammar",
         confidence: Math.min(Math.max(Number(c.confidence) || 0.5, 0), 1),
         startIndex: Math.max(Number(c.startIndex) || 0, 0),
-        endIndex: Math.max(Number(c.endIndex) || 0, 0)
+        endIndex: Math.max(Number(c.endIndex) || 0, 0),
       }))
-      .filter(c => c.original && c.corrected && c.original !== c.corrected);
+      .filter((c) => c.original && c.corrected && c.original !== c.corrected);
   }
 
   /**
    * Generate cache key for request
    */
   private generateCacheKey(request: VoiceProcessingRequest): string {
-    const key = `${request.originalText}|${request.context || ''}|${request.options?.correctionSensitivity || 'medium'}`;
-    return Buffer.from(key).toString('base64').substring(0, 64);
+    const key = `${request.originalText}|${request.context || ""}|${
+      request.options?.correctionSensitivity || "medium"
+    }`;
+    return Buffer.from(key, "utf8").toString("base64").substring(0, 64);
   }
 
   /**
@@ -289,7 +307,9 @@ If no corrections are needed, return the original text with an empty corrections
     // Implement LRU cache behavior
     if (this.correctionCache.size >= this.MAX_CACHE_SIZE) {
       const firstKey = this.correctionCache.keys().next().value;
-      this.correctionCache.delete(firstKey);
+      if (firstKey) {
+        this.correctionCache.delete(firstKey);
+      }
     }
 
     this.correctionCache.set(key, result);
@@ -308,7 +328,7 @@ If no corrections are needed, return the original text with an empty corrections
   public getCacheStats(): { size: number; maxSize: number; hitRate?: number } {
     return {
       size: this.correctionCache.size,
-      maxSize: this.MAX_CACHE_SIZE
+      maxSize: this.MAX_CACHE_SIZE,
     };
   }
 }
