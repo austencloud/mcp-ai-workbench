@@ -32,12 +32,8 @@
   }
 
   function handleVoiceTranscription(text: string) {
-    // Append voice transcription to current message
-    if (message.trim()) {
-      message += ' ' + text;
-    } else {
-      message = text;
-    }
+    // Replace message with voice transcription (don't append to avoid duplicates)
+    message = text;
 
     // Auto-resize textarea
     if (textareaElement) {

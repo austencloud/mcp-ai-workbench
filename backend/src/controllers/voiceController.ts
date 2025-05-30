@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { VoiceProcessingService } from "../services/voiceProcessingService";
+import { VoiceTestingService } from "../services/voiceTestingService";
 import { AIProviderService } from "../services/aiProviderService";
 import type {
   VoiceProcessingRequest,
@@ -10,6 +11,7 @@ import type { VoiceProfile, VoiceProcessingOptions } from "../types/voiceInput";
 // Initialize services
 const aiProvider = new AIProviderService();
 const voiceProcessor = new VoiceProcessingService(aiProvider);
+const voiceTester = new VoiceTestingService();
 
 export interface ProcessVoiceRequest {
   Body: {
@@ -162,56 +164,36 @@ export async function clearVoiceCache(
 }
 
 /**
- * Test voice processing with sample text
+ * Test voice processing with comprehensive test suites
  */
 export async function testVoiceProcessing(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
   try {
-    const sampleTexts = [
-      "hello world this is a test",
-      "can you help me with this problem",
-      "i need to send an email to my boss about the meeting tomorrow",
-      "whats the weather like today",
-    ];
+    const results = await voiceTester.runAllTests();
 
-    const results = [];
-
-    for (const text of sampleTexts) {
-      const result = await voiceProcessor.processVoiceTranscription({
-        originalText: text,
-        options: {
-          enableGrammarCorrection: true,
-          enableContextCorrection: true,
-          correctionSensitivity: "medium",
-          autoApplyCorrections: false,
-          preserveUserIntent: true,
-        },
-      });
-
-      results.push({
-        original: text,
-        corrected: result.correctedText,
-        corrections: result.corrections,
-        confidence: result.confidence,
-        processingTime: result.processingTime,
-        success: result.success,
-      });
-    }
+    // Calculate overall statistics
+    const allResults = Object.values(results).flat();
+    const totalTests = allResults.length;
+    const passedTests = allResults.filter((r) => r.passed).length;
+    const averageScore =
+      allResults.reduce((sum, r) => sum + r.score, 0) / totalTests;
+    const averageProcessingTime =
+      allResults.reduce((sum, r) => sum + r.processingTime, 0) / totalTests;
 
     reply.send({
       success: true,
       data: {
         testResults: results,
         summary: {
-          totalTests: results.length,
-          successfulTests: results.filter((r) => r.success).length,
-          averageProcessingTime:
-            results.reduce((sum, r) => sum + r.processingTime, 0) /
-            results.length,
-          averageConfidence:
-            results.reduce((sum, r) => sum + r.confidence, 0) / results.length,
+          totalTests,
+          passedTests,
+          failedTests: totalTests - passedTests,
+          passRate: (passedTests / totalTests) * 100,
+          averageScore,
+          averageProcessingTime,
+          testSuites: Object.keys(results).length,
         },
       },
     });
@@ -263,6 +245,145 @@ export async function getSupportedLanguages(
     reply.status(500).send({
       success: false,
       error: "Failed to retrieve supported languages",
+    });
+  }
+}
+
+/**
+ * Run specific test suite
+ */
+export async function runTestSuite(
+  request: FastifyRequest<{ Querystring: { suite?: string } }>,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const { suite } = request.query;
+    const testSuites = voiceTester.getTestSuites();
+
+    if (suite) {
+      const targetSuite = testSuites.find((s) => s.name === suite);
+      if (!targetSuite) {
+        return reply.status(400).send({
+          success: false,
+          error: `Test suite '${suite}' not found`,
+          availableSuites: testSuites.map((s) => s.name),
+        });
+      }
+
+      const results = await voiceTester.runTestSuite(targetSuite);
+      const passedTests = results.filter((r) => r.passed).length;
+
+      reply.send({
+        success: true,
+        data: {
+          suiteName: suite,
+          results,
+          summary: {
+            totalTests: results.length,
+            passedTests,
+            failedTests: results.length - passedTests,
+            passRate: (passedTests / results.length) * 100,
+            averageScore:
+              results.reduce((sum, r) => sum + r.score, 0) / results.length,
+            averageProcessingTime:
+              results.reduce((sum, r) => sum + r.processingTime, 0) /
+              results.length,
+          },
+        },
+      });
+    } else {
+      // Return available test suites
+      reply.send({
+        success: true,
+        data: {
+          availableSuites: testSuites.map((suite) => ({
+            name: suite.name,
+            description: suite.description,
+            testCount: suite.testCases.length,
+          })),
+        },
+      });
+    }
+  } catch (error: any) {
+    console.error("Test suite error:", error);
+    reply.status(500).send({
+      success: false,
+      error: "Failed to run test suite",
+    });
+  }
+}
+
+/**
+ * Test specific correction sensitivity levels
+ */
+export async function testCorrectionSensitivity(
+  request: FastifyRequest<{ Body: { text: string } }>,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const { text } = request.body;
+
+    if (!text || typeof text !== "string") {
+      return reply.status(400).send({
+        success: false,
+        error: "Text is required and must be a string",
+      });
+    }
+
+    const sensitivities: ("low" | "medium" | "high")[] = [
+      "low",
+      "medium",
+      "high",
+    ];
+    const results = [];
+
+    for (const sensitivity of sensitivities) {
+      const result = await voiceProcessor.processVoiceTranscription({
+        originalText: text,
+        options: {
+          enableGrammarCorrection: true,
+          enableContextCorrection: true,
+          correctionSensitivity: sensitivity,
+          autoApplyCorrections: false,
+          preserveUserIntent: true,
+        },
+      });
+
+      results.push({
+        sensitivity,
+        original: text,
+        corrected: result.correctedText,
+        corrections: result.corrections,
+        confidence: result.confidence,
+        processingTime: result.processingTime,
+        success: result.success,
+        correctionCount: result.corrections.length,
+      });
+    }
+
+    reply.send({
+      success: true,
+      data: {
+        originalText: text,
+        results,
+        comparison: {
+          mostCorrections: results.reduce((max, r) =>
+            r.correctionCount > max.correctionCount ? r : max
+          ),
+          fastestProcessing: results.reduce((min, r) =>
+            r.processingTime < min.processingTime ? r : min
+          ),
+          highestConfidence: results.reduce((max, r) =>
+            r.confidence > max.confidence ? r : max
+          ),
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error("Sensitivity test error:", error);
+    reply.status(500).send({
+      success: false,
+      error: "Failed to test correction sensitivity",
     });
   }
 }

@@ -114,8 +114,16 @@ export class VoiceProcessingService {
   private buildCorrectionPrompt(request: VoiceProcessingRequest): string {
     const { originalText, context, userProfile, options } = request;
 
-    let prompt = `Please correct the following voice transcription for grammar, spelling, and clarity while preserving the original meaning and intent:\n\n`;
-    prompt += `Original text: "${originalText}"\n\n`;
+    let prompt = `Please correct the following voice transcription to create professional, properly formatted text. Focus on:\n\n`;
+    prompt += `CRITICAL REQUIREMENTS:\n`;
+    prompt += `1. Add proper punctuation (periods, commas, question marks, exclamation points)\n`;
+    prompt += `2. Capitalize the first letter of sentences and proper nouns\n`;
+    prompt += `3. Remove filler words (um, uh, like, you know, etc.)\n`;
+    prompt += `4. Fix grammar and sentence structure\n`;
+    prompt += `5. Ensure proper sentence breaks and paragraph structure\n`;
+    prompt += `6. Preserve the original meaning and intent completely\n\n`;
+
+    prompt += `Original voice transcription: "${originalText}"\n\n`;
 
     if (context) {
       prompt += `Context: ${context}\n\n`;
@@ -132,11 +140,23 @@ export class VoiceProcessingService {
     if (options?.correctionSensitivity) {
       const sensitivity = options.correctionSensitivity;
       if (sensitivity === "low") {
-        prompt += `Apply minimal corrections - only fix obvious errors.\n`;
+        prompt += `CORRECTION LEVEL: MINIMAL\n`;
+        prompt += `- Only fix obvious spelling errors and add basic punctuation\n`;
+        prompt += `- Preserve informal tone and casual language\n`;
+        prompt += `- Minimal grammar corrections\n`;
       } else if (sensitivity === "high") {
-        prompt += `Apply comprehensive corrections for grammar, style, and clarity.\n`;
+        prompt += `CORRECTION LEVEL: COMPREHENSIVE\n`;
+        prompt += `- Apply extensive grammar, style, and clarity improvements\n`;
+        prompt += `- Enhance sentence structure and flow\n`;
+        prompt += `- Use professional language and formal tone\n`;
+        prompt += `- Improve word choice and eliminate redundancy\n`;
+        prompt += `- Ensure perfect punctuation and capitalization\n`;
       } else {
-        prompt += `Apply moderate corrections for grammar and spelling.\n`;
+        prompt += `CORRECTION LEVEL: MODERATE\n`;
+        prompt += `- Fix grammar, spelling, and punctuation errors\n`;
+        prompt += `- Maintain the original tone and style\n`;
+        prompt += `- Add necessary punctuation and capitalization\n`;
+        prompt += `- Remove obvious filler words\n`;
       }
     }
 

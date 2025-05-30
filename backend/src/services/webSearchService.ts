@@ -124,9 +124,9 @@ export class WebSearchService {
           }
         } catch (error) {
           console.error(`[WebSearch] Provider ${provider.name} failed:`, error);
-          allErrors.push({ 
-            provider: provider.name, 
-            error: error instanceof Error ? error.message : String(error)
+          allErrors.push({
+            provider: provider.name,
+            error: error instanceof Error ? error.message : String(error),
           });
           // Continue to next provider
         }
@@ -221,7 +221,13 @@ export class WebSearchService {
     query: WebSearchQuery
   ): Promise<WebSearchResult[]> {
     try {
-      // Use DuckDuckGo HTML search with basic scraping
+      // First try the instant answer API which is more reliable
+      const instantResults = await this.duckDuckGoInstantAnswer(query);
+      if (instantResults.length > 0) {
+        return instantResults;
+      }
+
+      // Fallback to HTML search with improved parsing
       const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(
         query.query
       )}`;
@@ -230,61 +236,67 @@ export class WebSearchService {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.5",
+          "Accept-Encoding": "gzip, deflate",
+          DNT: "1",
+          Connection: "keep-alive",
+          "Upgrade-Insecure-Requests": "1",
         },
-        timeout: 10000,
+        timeout: 15000,
       });
 
-      // Simple regex-based parsing of DuckDuckGo HTML results
       const results: WebSearchResult[] = [];
       const htmlContent = response.data;
 
-      // Extract result links and titles using regex (basic implementation)
-      const resultRegex =
-        /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g;
-      const snippetRegex = /<a[^>]+class="result__snippet"[^>]*>([^<]+)<\/a>/g;
+      // Improved regex patterns for DuckDuckGo results
+      const resultBlocks =
+        htmlContent.match(/<div class="result[^"]*"[^>]*>[\s\S]*?<\/div>/g) ||
+        [];
 
-      let match;
-      let snippetMatch;
-      const snippets: string[] = [];
-
-      // Extract snippets
-      while ((snippetMatch = snippetRegex.exec(htmlContent)) !== null) {
-        snippets.push(snippetMatch[1].trim());
-      }
-
-      let index = 0;
-      while (
-        (match = resultRegex.exec(htmlContent)) !== null &&
-        index < (query.maxResults || 10)
+      for (
+        let i = 0;
+        i < Math.min(resultBlocks.length, query.maxResults || 10);
+        i++
       ) {
-        const url = match[1];
-        const title = match[2].trim();
+        const block = resultBlocks[i];
 
-        // Skip if URL doesn't look valid
+        // Extract title and URL
+        const titleMatch = block.match(
+          /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/
+        );
+        if (!titleMatch) continue;
+
+        const url = titleMatch[1];
+        const title = titleMatch[2].trim();
+
+        // Skip invalid URLs
         if (!url.startsWith("http")) continue;
+
+        // Extract snippet
+        const snippetMatch =
+          block.match(/<a[^>]+class="result__snippet"[^>]*>([^<]+)<\/a>/) ||
+          block.match(/<span class="result__snippet[^"]*">([^<]+)<\/span>/);
+        const snippet = snippetMatch ? snippetMatch[1].trim() : title;
 
         results.push({
           title,
           url,
-          snippet: snippets[index] || title,
+          snippet,
           source: this.extractDomain(url),
-          rank: index + 1,
+          rank: i + 1,
         });
-
-        index++;
-      }
-
-      // If regex parsing fails, try the instant answer API as fallback
-      if (results.length === 0) {
-        return await this.duckDuckGoInstantAnswer(query);
       }
 
       return results;
     } catch (error) {
-      console.error(
-        "[WebSearch] DuckDuckGo HTML search failed, trying instant answer API"
+      console.error("[WebSearch] DuckDuckGo search failed:", error);
+      throw new SearchProviderError(
+        "DuckDuckGo search failed",
+        "duckduckgo",
+        error as Error
       );
-      return await this.duckDuckGoInstantAnswer(query);
     }
   }
 

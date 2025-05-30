@@ -14,6 +14,7 @@ interface ChatParams {
   provider?: string;
   model?: string;
   stream?: boolean;
+  enableWebSearch?: boolean;
 }
 
 export const chatController = {
@@ -24,6 +25,7 @@ export const chatController = {
     provider,
     model,
     stream = false,
+    enableWebSearch = true,
   }: ChatParams) {
     try {
       // Add system context if workspace is provided
@@ -40,6 +42,7 @@ export const chatController = {
         provider,
         model,
         conversationId,
+        enableWebSearch,
       });
 
       if (!aiResponse.success) {
@@ -119,6 +122,19 @@ export const chatController = {
       return { success: true };
     } catch (error) {
       return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+
+  async getSavedPreferences() {
+    try {
+      const preferences = aiService.getSavedPreferences();
+      return { preferences, success: true };
+    } catch (error) {
+      return {
+        preferences: { provider: null, model: null },
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       };

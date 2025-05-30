@@ -20,10 +20,43 @@
       if (result.success && result.providers) {
         providers = result.providers;
         
-        const availableProvider = providers.find(p => p?.available && p?.name);
-        if (availableProvider) {
-          selectedProvider = availableProvider.name.toLowerCase();
-          selectedModel = availableProvider.models?.[0] || '';
+        // Load saved preferences first
+        const savedPrefs = await mcp.getSavedPreferences();
+        
+        if (savedPrefs.success && savedPrefs.preferences.provider) {
+          // Use saved preferences if available
+          const savedProvider = savedPrefs.preferences.provider;
+          const savedModel = savedPrefs.preferences.model;
+          
+          const provider = providers.find(p => p?.name?.toLowerCase() === savedProvider.toLowerCase());
+          if (provider && provider.available) {
+            selectedProvider = savedProvider.toLowerCase();
+            selectedModel = savedModel || provider.models?.[0] || '';
+            console.log(`🎯 Restored saved AI provider: ${selectedProvider} with model: ${selectedModel}`);
+          } else {
+            console.log(`⚠️ Saved provider ${savedProvider} not available, using fallback`);
+            // Fallback to first available provider
+            const availableProvider = providers.find(p => p?.available && p?.name);
+            if (availableProvider) {
+              selectedProvider = availableProvider.name.toLowerCase();
+              selectedModel = availableProvider.models?.[0] || '';
+            }
+          }
+        } else {
+          // No saved preferences, prefer Ollama if available, otherwise use first available
+          const ollamaProvider = providers.find(p => p?.name?.toLowerCase() === 'ollama' && p?.available);
+          if (ollamaProvider) {
+            selectedProvider = 'ollama';
+            selectedModel = ollamaProvider.models?.[0] || '';
+            console.log(`🦙 No saved preferences, defaulting to Ollama: ${selectedModel}`);
+          } else {
+            const availableProvider = providers.find(p => p?.available && p?.name);
+            if (availableProvider) {
+              selectedProvider = availableProvider.name.toLowerCase();
+              selectedModel = availableProvider.models?.[0] || '';
+              console.log(`🤖 Ollama not available, using: ${selectedProvider}`);
+            }
+          }
         }
       }
     } catch (error) {

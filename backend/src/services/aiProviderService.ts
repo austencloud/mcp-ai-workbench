@@ -2,6 +2,12 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
+import { WebBrowsingService } from "./webBrowsingService";
+import { SearchProgressManager } from "./searchProgressManager";
+import { MathComputationService } from "./mathComputationService";
+import { MathQuery } from "../types/mathComputation";
+import fs from "fs";
+import path from "path";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -18,6 +24,8 @@ export interface AIResponse {
   model?: string;
   usage?: any;
   error?: string;
+  webSearchUsed?: boolean;
+  mathComputationUsed?: boolean;
 }
 
 export interface AIProvider {
@@ -468,6 +476,9 @@ class OllamaProvider implements AIProvider {
 export class AIProviderService {
   private providers: Map<string, AIProvider> = new Map();
   private defaultProvider: string;
+  private webBrowsingService: WebBrowsingService;
+  private mathComputationService: MathComputationService;
+  private preferencesFile: string;
 
   constructor() {
     // Initialize all providers
@@ -477,21 +488,342 @@ export class AIProviderService {
     this.providers.set("deepseek", new DeepSeekProvider());
     this.providers.set("ollama", new OllamaProvider());
 
-    this.defaultProvider = process.env.DEFAULT_AI_PROVIDER || "openai";
+    this.preferencesFile = path.join(process.cwd(), "ai-preferences.json");
+    this.defaultProvider =
+      this.loadSavedProvider() || process.env.DEFAULT_AI_PROVIDER || "ollama";
+
+    // Initialize web browsing service with AI service reference
+    this.webBrowsingService = new WebBrowsingService(this);
+
+    // Initialize mathematical computation service with AI capability
+    this.mathComputationService = new MathComputationService({}, this);
   }
 
-  async getAvailableProviders(): Promise<
-    { name: string; models: string[]; available: boolean }[]
-  > {
-    const results = [];
-    for (const [key, provider] of this.providers) {
-      results.push({
-        name: provider.name,
-        models: provider.models,
-        available: provider.available && (await provider.testConnection()),
-      });
+  private loadSavedProvider(): string | null {
+    try {
+      if (fs.existsSync(this.preferencesFile)) {
+        const preferences = JSON.parse(
+          fs.readFileSync(this.preferencesFile, "utf8")
+        );
+        const savedProvider = preferences.provider;
+        const savedModel = preferences.model;
+
+        if (savedProvider && this.providers.has(savedProvider)) {
+          console.log(
+            `[AI] Loaded saved provider: ${savedProvider} with model: ${
+              savedModel || "default"
+            }`
+          );
+          return savedProvider;
+        }
+      }
+    } catch (error) {
+      console.log(`[AI] Could not load saved preferences: ${error}`);
     }
-    return results;
+    return null;
+  }
+
+  private saveProviderPreference(provider: string, model?: string): void {
+    try {
+      const preferences = {
+        provider,
+        model: model || null,
+        timestamp: Date.now(),
+      };
+      fs.writeFileSync(
+        this.preferencesFile,
+        JSON.stringify(preferences, null, 2)
+      );
+      console.log(
+        `[AI] Saved provider preference: ${provider} with model: ${
+          model || "default"
+        }`
+      );
+    } catch (error) {
+      console.log(`[AI] Could not save preferences: ${error}`);
+    }
+  }
+
+  getSavedPreferences(): {
+    provider: string | null;
+    model: string | null;
+  } {
+    try {
+      if (fs.existsSync(this.preferencesFile)) {
+        const preferences = JSON.parse(
+          fs.readFileSync(this.preferencesFile, "utf8")
+        );
+        return {
+          provider: preferences.provider || null,
+          model: preferences.model || null,
+        };
+      }
+    } catch (error) {
+      console.log(`[AI] Could not load preferences: ${error}`);
+    }
+    return { provider: null, model: null };
+  }
+
+  private async detectWebSearchNeed(message: string): Promise<boolean> {
+    const simpleDateQueries = [
+      /^what day is it\??$/i,
+      /^what's today\??$/i,
+      /^current date\??$/i,
+      /^today's date\??$/i,
+      /^what day of the week is it\??$/i,
+      /^what time is it\??$/i,
+      /^what day of the week is tomorrow\??$/i,
+      /^what's tomorrow\??$/i,
+    ];
+
+    if (simpleDateQueries.some((pattern) => pattern.test(message.trim()))) {
+      console.log(
+        `[AI] Simple date query detected, skipping web search: "${message}"`
+      );
+      return false;
+    }
+
+    try {
+      const analysisPrompt = `Does this query need web search for current/real-time info?
+
+Query: "${message}"
+
+Answer only "YES" or "NO":`;
+
+      let analysisResult = "";
+      const timeout = 5000; // 5 second timeout
+
+      // Try Ollama first with timeout
+      const ollamaProvider = this.providers.get("ollama");
+      if (ollamaProvider?.available) {
+        try {
+          const analysisPromise = ollamaProvider.chat(
+            [{ role: "user", content: analysisPrompt }],
+            { model: "llama3.2:latest" }
+          );
+
+          const timeoutPromise = new Promise<AIResponse>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), timeout)
+          );
+
+          const result = await Promise.race([analysisPromise, timeoutPromise]);
+          if (result.success) {
+            analysisResult = result.message.content.trim().toUpperCase();
+          }
+        } catch (error) {
+          console.log("[AI] Ollama analysis failed/timeout, trying fallback");
+        }
+      }
+
+      // Fallback to Google with timeout
+      if (!analysisResult && this.providers.get("google")?.available) {
+        try {
+          const analysisPromise = this.providers
+            .get("google")!
+            .chat([{ role: "user", content: analysisPrompt }], {
+              model: "gemini-1.5-flash",
+            });
+
+          const timeoutPromise = new Promise<AIResponse>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), timeout)
+          );
+
+          const result = await Promise.race([analysisPromise, timeoutPromise]);
+          if (result.success) {
+            analysisResult = result.message.content.trim().toUpperCase();
+          }
+        } catch (error) {
+          console.log(
+            "[AI] Google analysis failed/timeout, using fallback logic"
+          );
+        }
+      }
+
+      if (analysisResult.includes("YES")) {
+        console.log(`[AI] AI-powered web search triggered for: "${message}"`);
+        return true;
+      } else if (analysisResult.includes("NO")) {
+        console.log(
+          `[AI] AI-powered decision: no web search needed for: "${message}"`
+        );
+        return false;
+      }
+    } catch (error) {
+      console.log("[AI] AI analysis failed, falling back to regex patterns");
+    }
+
+    // Fast fallback to simple keyword detection
+    const webSearchKeywords = [
+      /(?:latest|recent|news|current|today|now|this year|2024|2025)/i,
+      /(?:near me|in [A-Z][a-z]+|weather|movies|restaurants|showtimes)/i,
+      /(?:who is|what is.*(?:company|person|place|stock))/i,
+      /(?:when was.*(?:born|founded|created|invented))/i,
+    ];
+
+    const needsSearch =
+      webSearchKeywords.some((pattern) => pattern.test(message)) &&
+      message.length > 15 &&
+      !/(hello|hi|thanks|what is \d+|how are you)/i.test(message);
+
+    if (needsSearch) {
+      console.log(`[AI] Fallback regex triggered web search for: "${message}"`);
+    }
+
+    return needsSearch;
+  }
+
+  private async detectMathQuery(message: string): Promise<boolean> {
+    if (message.length > 200) return false;
+
+    // Fast regex-based detection first (most efficient)
+    const isMathRegex = this.mathComputationService.isMathQuery(message);
+    if (isMathRegex) return true;
+
+    // Only use AI for ambiguous cases, with timeout
+    try {
+      const timeout = 2000;
+      const aiDetectionPromise =
+        this.mathComputationService.isMathQueryAI(message);
+      const timeoutPromise = new Promise<boolean>((_, reject) =>
+        setTimeout(() => reject(new Error("AI detection timeout")), timeout)
+      );
+
+      return await Promise.race([aiDetectionPromise, timeoutPromise]);
+    } catch (error) {
+      console.log(
+        `[Math] AI detection failed/timeout, using regex result: ${isMathRegex}`
+      );
+      return isMathRegex;
+    }
+  }
+
+  private async performMathComputation(query: string): Promise<string> {
+    try {
+      console.log(`[AI] Performing mathematical computation for: "${query}"`);
+
+      const mathQuery: MathQuery = {
+        expression: query,
+        precision: 50,
+        format: "auto",
+      };
+
+      const result = await this.mathComputationService.compute(mathQuery);
+
+      if (!result.success) {
+        return `I attempted to calculate "${query}" but encountered an error: ${result.error}. Let me try to help you with this calculation using my general knowledge.`;
+      }
+
+      let response = `I calculated "${query}" using high-precision mathematical computation:\n\n`;
+      response += `**Precise Result:** ${result.result}\n`;
+
+      if (
+        result.approximateResult &&
+        result.approximateResult !== result.result
+      ) {
+        response += `**Approximate:** ${result.approximateResult}\n`;
+      }
+
+      response += `**Method:** ${result.method}\n`;
+      response += `**Precision:** ${result.precision} decimal places\n`;
+      response += `**Operation Type:** ${result.operationType}\n`;
+
+      if (result.metadata.executionTime) {
+        response += `**Computation Time:** ${result.metadata.executionTime}ms\n`;
+      }
+
+      // Add verification note for square roots
+      if (result.operationType === "square_root") {
+        response += `\n*This result was computed using high-precision arithmetic to avoid AI hallucination about mathematical values.*`;
+      }
+
+      return response;
+    } catch (error) {
+      console.error("[AI] Math computation failed:", error);
+      return `I attempted to calculate "${query}" but encountered an issue. Let me provide what I can from my mathematical knowledge, though I recommend using a calculator for precise results.`;
+    }
+  }
+
+  private async performWebSearch(query: string): Promise<string> {
+    try {
+      // Generate session ID for progress tracking
+      const sessionId = SearchProgressManager.generateSessionId();
+
+      const searchResult = await this.webBrowsingService.searchAndAnalyze(
+        query,
+        3,
+        sessionId
+      );
+
+      if (searchResult.results.length === 0) {
+        return `I searched the web but couldn't find specific information about "${query}".`;
+      }
+
+      const topResults = searchResult.results.slice(0, 3);
+      let webInfo = `Based on my web search, here's what I found about "${query}":\n\n`;
+
+      topResults.forEach((result, index) => {
+        webInfo += `${index + 1}. **${result.title}**\n`;
+        webInfo += `   ${result.snippet}\n`;
+        webInfo += `   Source: ${result.source}\n\n`;
+      });
+
+      if (searchResult.analysis && searchResult.analysis.length > 100) {
+        webInfo += `**Analysis:** ${searchResult.analysis}`;
+      }
+
+      return webInfo;
+    } catch (error) {
+      console.error("[AI] Web search failed:", error);
+      return `I attempted to search the web for "${query}" but encountered an issue. Let me provide what I can from my training data, though it may not be the most current information.`;
+    }
+  }
+
+  private getDirectDateAnswer(query: string): string | null {
+    const simpleDateQueries = [
+      /what day is it|what's today|current date|today's date|what day of the week is it/i,
+      /what day of the week is tomorrow|what's tomorrow/i,
+      /what time is it/i,
+    ];
+
+    if (simpleDateQueries.some((pattern) => pattern.test(query))) {
+      const now = new Date();
+
+      if (/tomorrow/i.test(query)) {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const dayOfWeek = tomorrow.toLocaleDateString("en-US", {
+          weekday: "long",
+        });
+        const fullDate = tomorrow.toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        return `Tomorrow is ${dayOfWeek}, ${fullDate}.`;
+      } else if (/time/i.test(query)) {
+        const timeString = now.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+          timeZoneName: "short",
+        });
+        return `The current time is ${timeString}.`;
+      } else {
+        const dayOfWeek = now.toLocaleDateString("en-US", {
+          weekday: "long",
+        });
+        const fullDate = now.toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        return `Today is ${dayOfWeek}, ${fullDate}.`;
+      }
+    }
+
+    return null;
   }
 
   async chat(
@@ -500,8 +832,95 @@ export class AIProviderService {
       provider?: string;
       model?: string;
       conversationId?: number;
+      enableWebSearch?: boolean;
     } = {}
   ): Promise<AIResponse> {
+    const lastMessage = messages[messages.length - 1];
+    let webSearchUsed = false;
+    let mathComputationUsed = false;
+    let enhancedMessages = [...messages];
+
+    // Save provider preference when a provider/model is used
+    if (options.provider || options.model) {
+      this.saveProviderPreference(
+        options.provider || this.defaultProvider,
+        options.model
+      );
+    }
+
+    // Check for simple date queries first
+    if (lastMessage.role === "user") {
+      const directAnswer = this.getDirectDateAnswer(lastMessage.content);
+      if (directAnswer) {
+        console.log(
+          `[AI] Providing direct date answer: "${lastMessage.content}"`
+        );
+        return {
+          message: { role: "assistant", content: directAnswer },
+          success: true,
+          provider: "System",
+          webSearchUsed: false,
+          mathComputationUsed: false,
+        };
+      }
+    }
+
+    // Check for mathematical queries before web search
+    if (lastMessage.role === "user") {
+      const isMathQuery = await this.detectMathQuery(lastMessage.content);
+
+      if (isMathQuery) {
+        console.log(
+          `[AI] Detected mathematical query: "${lastMessage.content}"`
+        );
+
+        const mathResult = await this.performMathComputation(
+          lastMessage.content
+        );
+        mathComputationUsed = true;
+
+        return {
+          message: { role: "assistant", content: mathResult },
+          success: true,
+          provider: "MathComputation",
+          webSearchUsed: false,
+          mathComputationUsed: true,
+        };
+      }
+    }
+
+    // Auto-detect web search need (default enabled unless explicitly disabled)
+    if (options.enableWebSearch !== false && lastMessage.role === "user") {
+      const needsWebSearch = await this.detectWebSearchNeed(
+        lastMessage.content
+      );
+
+      if (needsWebSearch) {
+        console.log(
+          `[AI] Detected web search need for: "${lastMessage.content}"`
+        );
+
+        const webResults = await this.performWebSearch(lastMessage.content);
+        webSearchUsed = true;
+
+        // Add web search context to the conversation
+        enhancedMessages = [
+          ...messages.slice(0, -1),
+          {
+            role: "system",
+            content: `IMPORTANT: You have access to current web search results below. Use this information to answer the user's question accurately and factually.
+
+Web search results for "${lastMessage.content}":
+
+${webResults}
+
+Based on these current search results, provide a comprehensive answer to the user's question. Always cite your sources and indicate that the information comes from web search. If the user asks about current information like today's date, time, or recent events, use the search results to provide accurate, up-to-date information.`,
+          },
+          lastMessage,
+        ];
+      }
+    }
+
     const providerName = options.provider || this.defaultProvider;
     const provider = this.providers.get(providerName);
 
@@ -513,11 +932,12 @@ export class AIProviderService {
         },
         success: false,
         error: "Unknown provider",
+        webSearchUsed,
+        mathComputationUsed,
       };
     }
 
     if (!provider.available) {
-      // Try to find an available provider
       for (const [key, fallbackProvider] of this.providers) {
         if (
           fallbackProvider.available &&
@@ -526,7 +946,8 @@ export class AIProviderService {
           console.log(
             `Falling back to ${fallbackProvider.name} from ${provider.name}`
           );
-          return await fallbackProvider.chat(messages, options);
+          const result = await fallbackProvider.chat(enhancedMessages, options);
+          return { ...result, webSearchUsed, mathComputationUsed };
         }
       }
 
@@ -538,14 +959,54 @@ export class AIProviderService {
         },
         success: false,
         error: "No providers available",
+        webSearchUsed,
+        mathComputationUsed,
       };
     }
 
-    return await provider.chat(messages, options);
+    const result = await provider.chat(enhancedMessages, options);
+    return { ...result, webSearchUsed, mathComputationUsed };
   }
 
   getProvider(name: string): AIProvider | undefined {
     return this.providers.get(name);
+  }
+
+  async getAvailableProviders(): Promise<
+    Array<{
+      name: string;
+      models: string[];
+      available: boolean;
+      connected?: boolean;
+    }>
+  > {
+    const providers = [];
+
+    for (const [key, provider] of this.providers) {
+      let connected = false;
+      if (provider.available) {
+        try {
+          // Add 3 second timeout for connection tests
+          const connectionPromise = provider.testConnection();
+          const timeoutPromise = new Promise<boolean>((_, reject) =>
+            setTimeout(() => reject(new Error("Connection test timeout")), 3000)
+          );
+
+          connected = await Promise.race([connectionPromise, timeoutPromise]);
+        } catch {
+          connected = false;
+        }
+      }
+
+      providers.push({
+        name: provider.name,
+        models: provider.models,
+        available: provider.available,
+        connected,
+      });
+    }
+
+    return providers;
   }
 
   async refreshOllamaModels(): Promise<void> {
@@ -553,5 +1014,10 @@ export class AIProviderService {
     if (ollama) {
       await (ollama as any).checkAvailability();
     }
+  }
+
+  async generateResponse(messages: ChatMessage[]): Promise<string> {
+    const result = await this.chat(messages);
+    return result.message.content;
   }
 }

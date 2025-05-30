@@ -70,37 +70,47 @@
       return { original, corrected };
     }
 
-    // Simple word-based diff highlighting
-    const originalWords = original.split(' ');
-    const correctedWords = corrected.split(' ');
-    
+    // Enhanced character-level diff highlighting for better precision
     let highlightedOriginal = '';
     let highlightedCorrected = '';
-    
-    const maxLength = Math.max(originalWords.length, correctedWords.length);
-    
+
+    // Split into words but preserve spaces and punctuation
+    const originalTokens = original.split(/(\s+|[.,!?;:])/);
+    const correctedTokens = corrected.split(/(\s+|[.,!?;:])/);
+
+    const maxLength = Math.max(originalTokens.length, correctedTokens.length);
+
     for (let i = 0; i < maxLength; i++) {
-      const origWord = originalWords[i] || '';
-      const corrWord = correctedWords[i] || '';
-      
-      if (origWord !== corrWord) {
-        if (origWord) {
-          highlightedOriginal += `<span class="bg-red-500/20 text-red-200 px-1 rounded">${origWord}</span> `;
+      const origToken = originalTokens[i] || '';
+      const corrToken = correctedTokens[i] || '';
+
+      if (origToken !== corrToken) {
+        // Highlight differences
+        if (origToken && origToken.trim()) {
+          highlightedOriginal += `<span class="bg-red-500/30 text-red-200 px-1 rounded border border-red-400/30" title="Removed: ${origToken}">${origToken}</span>`;
+        } else if (origToken) {
+          highlightedOriginal += origToken; // Preserve whitespace
         }
-        if (corrWord) {
-          highlightedCorrected += `<span class="bg-green-500/20 text-green-200 px-1 rounded">${corrWord}</span> `;
+
+        if (corrToken && corrToken.trim()) {
+          highlightedCorrected += `<span class="bg-green-500/30 text-green-200 px-1 rounded border border-green-400/30" title="Added: ${corrToken}">${corrToken}</span>`;
+        } else if (corrToken) {
+          highlightedCorrected += corrToken; // Preserve whitespace
         }
       } else {
-        highlightedOriginal += origWord + ' ';
-        highlightedCorrected += corrWord + ' ';
+        // No change
+        highlightedOriginal += origToken;
+        highlightedCorrected += corrToken;
       }
     }
-    
+
     return {
-      original: highlightedOriginal.trim(),
-      corrected: highlightedCorrected.trim()
+      original: highlightedOriginal,
+      corrected: highlightedCorrected
     };
   }
+
+
 
   let highlighted = $derived(highlightDifferences(originalText, correctedText));
   let hasCorrections = $derived(corrections.length > 0);

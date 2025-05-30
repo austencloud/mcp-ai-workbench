@@ -232,6 +232,24 @@ app.post("/rpc", async (request, reply) => {
           { send: (data: any) => data } as any
         );
         break;
+      case "runTestSuite":
+        result = await voiceController.runTestSuite(
+          { query: params } as any,
+          {
+            send: (data: any) => data,
+            status: (code: number) => ({ send: (data: any) => data }),
+          } as any
+        );
+        break;
+      case "testCorrectionSensitivity":
+        result = await voiceController.testCorrectionSensitivity(
+          { body: params } as any,
+          {
+            send: (data: any) => data,
+            status: (code: number) => ({ send: (data: any) => data }),
+          } as any
+        );
+        break;
       default:
         throw new Error(`Unknown method: ${method}`);
     }

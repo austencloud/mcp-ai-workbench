@@ -424,6 +424,18 @@ class MCPClient {
   }> {
     return this.call("getSupportedLanguages", {});
   }
+
+  async runTestSuite(params?: {
+    suite?: string;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("runTestSuite", params || {});
+  }
+
+  async testCorrectionSensitivity(params: {
+    text: string;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.call("testCorrectionSensitivity", params);
+  }
 }
 
 // Export singleton instance

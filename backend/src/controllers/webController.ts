@@ -3,8 +3,8 @@
  * HTTP endpoints for web browsing functionality
  */
 
-import { WebBrowsingService } from '../services/webBrowsingService';
-import { WebInteractionService } from '../services/webInteractionService';
+import { WebBrowsingService } from "../services/webBrowsingService";
+import { WebInteractionService } from "../services/webInteractionService";
 import {
   WebSearchParams,
   WebFetchParams,
@@ -20,8 +20,8 @@ import {
   WebExtractResponse,
   WebResearchResponse,
   WebVerifyResponse,
-  BrowserAction
-} from '../types/webBrowsing';
+  BrowserAction,
+} from "../types/webBrowsing";
 
 export class WebController {
   private webBrowsingService: WebBrowsingService;
@@ -46,7 +46,7 @@ export class WebController {
         dateRange: params.dateRange as any,
         language: params.language,
         region: params.region,
-        safeSearch: params.safeSearch
+        safeSearch: params.safeSearch,
       };
 
       const results = await this.webBrowsingService.searchAndAnalyze(
@@ -61,13 +61,13 @@ export class WebController {
         results: results.results,
         totalResults: results.results.length,
         searchTime,
-        analysis: results.analysis
+        analysis: results.analysis,
       } as any;
     } catch (error) {
-      console.error('[WebController] Web search failed:', error);
+      console.error("[WebController] Web search failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Web search failed'
+        error: error instanceof Error ? error.message : "Web search failed",
       };
     }
   }
@@ -88,13 +88,13 @@ export class WebController {
 
       return {
         success: true,
-        content
+        content,
       };
     } catch (error) {
-      console.error('[WebController] Web fetch failed:', error);
+      console.error("[WebController] Web fetch failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Web fetch failed'
+        error: error instanceof Error ? error.message : "Web fetch failed",
       };
     }
   }
@@ -116,8 +116,8 @@ export class WebController {
       // Navigate to URL if provided
       if (params.url) {
         await this.interactionService.executeAction(sessionId, {
-          type: 'navigate',
-          target: params.url
+          type: "navigate",
+          target: params.url,
         });
       }
 
@@ -136,13 +136,13 @@ export class WebController {
         success: true,
         sessionId,
         currentUrl,
-        title
+        title,
       };
     } catch (error) {
-      console.error('[WebController] Web browse failed:', error);
+      console.error("[WebController] Web browse failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Web browse failed'
+        error: error instanceof Error ? error.message : "Web browse failed",
       };
     }
   }
@@ -150,8 +150,12 @@ export class WebController {
   /**
    * Take screenshot
    */
-  async webScreenshot(params: WebScreenshotParams): Promise<WebScreenshotResponse> {
-    console.log(`[WebController] Screenshot request for session: ${params.sessionId}`);
+  async webScreenshot(
+    params: WebScreenshotParams
+  ): Promise<WebScreenshotResponse> {
+    console.log(
+      `[WebController] Screenshot request for session: ${params.sessionId}`
+    );
 
     try {
       const screenshot = await this.interactionService.takeScreenshot(
@@ -160,17 +164,17 @@ export class WebController {
       );
 
       // Convert buffer to base64
-      const base64Screenshot = screenshot.toString('base64');
+      const base64Screenshot = screenshot.toString("base64");
 
       return {
         success: true,
-        screenshot: base64Screenshot
+        screenshot: base64Screenshot,
       };
     } catch (error) {
-      console.error('[WebController] Screenshot failed:', error);
+      console.error("[WebController] Screenshot failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Screenshot failed'
+        error: error instanceof Error ? error.message : "Screenshot failed",
       };
     }
   }
@@ -179,40 +183,50 @@ export class WebController {
    * Extract content from page
    */
   async webExtract(params: WebExtractParams): Promise<WebExtractResponse> {
-    console.log(`[WebController] Extract request for session: ${params.sessionId}`);
+    console.log(
+      `[WebController] Extract request for session: ${params.sessionId}`
+    );
 
     try {
       let data: any;
 
-      if (params.extractType === 'text' || !params.extractType) {
-        const content = await this.interactionService.extractPageContent(params.sessionId);
+      if (params.extractType === "text" || !params.extractType) {
+        const content = await this.interactionService.extractPageContent(
+          params.sessionId
+        );
         data = content.cleanText;
-      } else if (params.extractType === 'html') {
-        const content = await this.interactionService.extractPageContent(params.sessionId);
+      } else if (params.extractType === "html") {
+        const content = await this.interactionService.extractPageContent(
+          params.sessionId
+        );
         data = content.content;
-      } else if (params.extractType === 'links') {
-        const content = await this.interactionService.extractPageContent(params.sessionId);
+      } else if (params.extractType === "links") {
+        const content = await this.interactionService.extractPageContent(
+          params.sessionId
+        );
         data = content.links;
-      } else if (params.extractType === 'images') {
-        const content = await this.interactionService.extractPageContent(params.sessionId);
+      } else if (params.extractType === "images") {
+        const content = await this.interactionService.extractPageContent(
+          params.sessionId
+        );
         data = content.images;
       } else {
         // Extract specific selector
         data = await this.interactionService.executeAction(params.sessionId, {
-          type: 'extract',
-          target: params.selector
+          type: "extract",
+          target: params.selector,
         });
       }
 
       return {
         success: true,
-        data
+        data,
       };
     } catch (error) {
-      console.error('[WebController] Extract failed:', error);
+      console.error("[WebController] Extract failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Extract failed'
+        error: error instanceof Error ? error.message : "Extract failed",
       };
     }
   }
@@ -226,7 +240,7 @@ export class WebController {
     try {
       const research = await this.webBrowsingService.researchTopic(
         params.topic,
-        params.depth || 'detailed'
+        params.depth || "detailed"
       );
 
       // Get sources if requested
@@ -243,13 +257,13 @@ export class WebController {
         success: true,
         research,
         sources,
-        confidence: 0.8 // Default confidence
+        confidence: 0.8, // Default confidence
       };
     } catch (error) {
-      console.error('[WebController] Research failed:', error);
+      console.error("[WebController] Research failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Research failed'
+        error: error instanceof Error ? error.message : "Research failed",
       };
     }
   }
@@ -271,13 +285,13 @@ export class WebController {
         verified: verification.verified,
         confidence: verification.confidence,
         sources: verification.sources,
-        evidence: verification.evidence
+        evidence: verification.evidence,
       };
     } catch (error) {
-      console.error('[WebController] Verification failed:', error);
+      console.error("[WebController] Verification failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Verification failed'
+        error: error instanceof Error ? error.message : "Verification failed",
       };
     }
   }
@@ -285,7 +299,10 @@ export class WebController {
   /**
    * Get recent news
    */
-  async webNews(params: { topic: string; maxResults?: number }): Promise<WebSearchResponse> {
+  async webNews(params: {
+    topic: string;
+    maxResults?: number;
+  }): Promise<WebSearchResponse> {
     console.log(`[WebController] News request: "${params.topic}"`);
 
     try {
@@ -298,13 +315,13 @@ export class WebController {
         success: true,
         results,
         totalResults: results.length,
-        searchTime: 0
+        searchTime: 0,
       };
     } catch (error) {
-      console.error('[WebController] News search failed:', error);
+      console.error("[WebController] News search failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'News search failed'
+        error: error instanceof Error ? error.message : "News search failed",
       };
     }
   }
@@ -312,21 +329,27 @@ export class WebController {
   /**
    * Compare products/services
    */
-  async webCompare(params: { products: string[] }): Promise<{ success: boolean; comparison?: string; error?: string }> {
-    console.log(`[WebController] Compare request: ${params.products.join(', ')}`);
+  async webCompare(params: {
+    products: string[];
+  }): Promise<{ success: boolean; comparison?: string; error?: string }> {
+    console.log(
+      `[WebController] Compare request: ${params.products.join(", ")}`
+    );
 
     try {
-      const comparison = await this.webBrowsingService.compareProducts(params.products);
+      const comparison = await this.webBrowsingService.compareProducts(
+        params.products
+      );
 
       return {
         success: true,
-        comparison
+        comparison,
       };
     } catch (error) {
-      console.error('[WebController] Comparison failed:', error);
+      console.error("[WebController] Comparison failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Comparison failed'
+        error: error instanceof Error ? error.message : "Comparison failed",
       };
     }
   }
@@ -334,20 +357,120 @@ export class WebController {
   /**
    * Close browsing session
    */
-  async webCloseSession(params: { sessionId: string }): Promise<{ success: boolean; error?: string }> {
+  async webCloseSession(params: {
+    sessionId: string;
+  }): Promise<{ success: boolean; error?: string }> {
     console.log(`[WebController] Close session request: ${params.sessionId}`);
 
     try {
       await this.interactionService.closeSession(params.sessionId);
 
       return {
-        success: true
+        success: true,
       };
     } catch (error) {
-      console.error('[WebController] Close session failed:', error);
+      console.error("[WebController] Close session failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Close session failed'
+        error: error instanceof Error ? error.message : "Close session failed",
+      };
+    }
+  }
+
+  /**
+   * Scrape content from a webpage with optional CSS selector
+   */
+  async webScrape(params: {
+    url: string;
+    selector?: string;
+    extractType?: "text" | "html" | "links" | "images";
+  }): Promise<{
+    success: boolean;
+    elements?: any[];
+    content?: string;
+    error?: string;
+  }> {
+    console.log(
+      `[WebController] Web scrape request: ${params.url}${
+        params.selector ? ` (selector: ${params.selector})` : ""
+      }`
+    );
+
+    try {
+      // Fetch the page content
+      const pageContent = await this.webBrowsingService.browsePage(params.url);
+
+      if (!pageContent) {
+        return {
+          success: false,
+          error: "Failed to fetch page content",
+        };
+      }
+
+      // If no selector specified, return the full content based on extractType
+      if (!params.selector) {
+        switch (params.extractType) {
+          case "text":
+            return {
+              success: true,
+              content: pageContent.cleanText,
+            };
+          case "html":
+            return {
+              success: true,
+              content: pageContent.content,
+            };
+          case "links":
+            return {
+              success: true,
+              elements: pageContent.links,
+            };
+          case "images":
+            return {
+              success: true,
+              elements: pageContent.images,
+            };
+          default:
+            return {
+              success: true,
+              content: pageContent.cleanText,
+              elements: [
+                {
+                  title: pageContent.title,
+                  wordCount: pageContent.wordCount,
+                  links: pageContent.links.slice(0, 10), // Limit to first 10 links
+                  images: pageContent.images.slice(0, 10), // Limit to first 10 images
+                },
+              ],
+            };
+        }
+      }
+
+      // If selector is specified, we need to parse the HTML and extract specific elements
+      const cheerio = require("cheerio");
+      const $ = cheerio.load(pageContent.content);
+      const elements: any[] = [];
+
+      $(params.selector).each((index: number, element: any) => {
+        const $el = $(element);
+        elements.push({
+          index,
+          text: $el.text().trim(),
+          html: $el.html(),
+          attributes: $el.get(0)?.attribs || {},
+          tagName: $el.get(0)?.tagName || "unknown",
+        });
+      });
+
+      return {
+        success: true,
+        elements,
+      };
+    } catch (error) {
+      console.error("[WebController] Web scrape failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Web scrape failed",
       };
     }
   }
@@ -355,20 +478,24 @@ export class WebController {
   /**
    * Get active sessions
    */
-  async webGetSessions(): Promise<{ success: boolean; sessions?: any[]; error?: string }> {
+  async webGetSessions(): Promise<{
+    success: boolean;
+    sessions?: any[];
+    error?: string;
+  }> {
     console.log(`[WebController] Get sessions request`);
 
     try {
       // This would require implementing session tracking in WebInteractionService
       return {
         success: true,
-        sessions: []
+        sessions: [],
       };
     } catch (error) {
-      console.error('[WebController] Get sessions failed:', error);
+      console.error("[WebController] Get sessions failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Get sessions failed'
+        error: error instanceof Error ? error.message : "Get sessions failed",
       };
     }
   }

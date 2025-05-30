@@ -21,7 +21,7 @@ export interface VoiceInputConfig {
 export interface VoiceProcessingOptions {
   enableGrammarCorrection: boolean;
   enableContextCorrection: boolean;
-  correctionSensitivity: 'low' | 'medium' | 'high';
+  correctionSensitivity: "low" | "medium" | "high";
   autoApplyCorrections: boolean;
   preserveUserIntent: boolean;
 }
@@ -39,7 +39,7 @@ export interface VoiceTranscriptionResult {
 export interface VoiceCorrection {
   original: string;
   corrected: string;
-  type: 'grammar' | 'spelling' | 'context' | 'punctuation';
+  type: "grammar" | "spelling" | "context" | "punctuation";
   confidence: number;
   startIndex: number;
   endIndex: number;
@@ -93,13 +93,13 @@ export interface VoiceInputError {
 }
 
 export enum VoiceErrorCode {
-  NOT_SUPPORTED = 'NOT_SUPPORTED',
-  PERMISSION_DENIED = 'PERMISSION_DENIED',
-  MICROPHONE_NOT_FOUND = 'MICROPHONE_NOT_FOUND',
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  RECOGNITION_ERROR = 'RECOGNITION_ERROR',
-  PROCESSING_ERROR = 'PROCESSING_ERROR',
-  TIMEOUT_ERROR = 'TIMEOUT_ERROR'
+  NOT_SUPPORTED = "NOT_SUPPORTED",
+  PERMISSION_DENIED = "PERMISSION_DENIED",
+  MICROPHONE_NOT_FOUND = "MICROPHONE_NOT_FOUND",
+  NETWORK_ERROR = "NETWORK_ERROR",
+  RECOGNITION_ERROR = "RECOGNITION_ERROR",
+  PROCESSING_ERROR = "PROCESSING_ERROR",
+  TIMEOUT_ERROR = "TIMEOUT_ERROR",
 }
 
 export interface VoiceInputEvents {

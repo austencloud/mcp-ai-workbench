@@ -3,12 +3,150 @@
   import { mcp, type ChatMessage } from '$lib/services/mcpClient';
   import MessageBubble from './MessageBubble.svelte';
   import InputBar from './InputBar.svelte';
+  import SearchProgressIndicator from './SearchProgressIndicator.svelte';
+  import MemoryIntegration from './MemoryIntegration.svelte';
+  import MemoryPanel from './MemoryPanel.svelte';
+  import { memoryService } from '$lib/services/memoryService';
+  import { MemoryType } from '$lib/types/memory';
 
   const mcpState = getContext<any>('mcpState');
 
   let chatContainer: HTMLDivElement;
   let inputBar: any;
   let isSending = $state(false);
+  let showMemoryPanel = $state(false);
+  let memoryContext = $state('');
+  let currentMessage = $state('');
+  let memoryOperations = $state<Array<{
+    messageIndex: number;
+    operation: string;
+    success: boolean;
+    memoryId?: string;
+    error?: string;
+    timestamp: Date;
+  }>>([]);
+  let copyButtonState = $state<'idle' | 'copying' | 'success' | 'error'>('idle');
+
+  // Function to track memory operations
+  function trackMemoryOperation(operation: string, success: boolean, memoryId?: string, error?: string) {
+    memoryOperations.push({
+      messageIndex: mcpState.conversation.length - 1,
+      operation,
+      success,
+      memoryId,
+      error,
+      timestamp: new Date()
+    });
+  }
+
+  // Extract semantic memories from user input and AI response
+  async function extractSemanticMemories(userInput: string, aiResponse: string) {
+    try {
+      // Patterns to detect user preferences and facts
+      const preferencePatterns = [
+        /I (?:am|really|actually) (?:fond of|love|like|enjoy|prefer|hate|dislike|can't stand) (.+)/i,
+        /My favorite (.+) is (.+)/i,
+        /I (?:work|live|study) (?:in|at|as) (.+)/i,
+        /I'm (?:a|an) (.+)/i,
+        /My name is (.+)/i,
+        /I'm from (.+)/i,
+        /I speak (.+)/i,
+        /I have (?:a|an) (.+)/i
+      ];
+
+      // Check if AI acknowledged remembering something
+      const aiRememberPatterns = [
+        /I (?:will|'ll) remember (?:that )?(.+)/i,
+        /I'll note (?:that )?(.+)/i,
+        /(?:Got it|Understood)[\.,]? (.+)/i,
+        /I've noted (?:that )?(.+)/i
+      ];
+
+      // Extract user preferences
+      for (const pattern of preferencePatterns) {
+        const match = userInput.match(pattern);
+        if (match) {
+          let preference = match[1] || match[2] || match[0];
+          preference = preference.replace(/[\.!,]$/, '').trim();
+          
+          if (preference && preference.length > 2 && preference.length < 200) {
+            console.log('Extracting user preference:', preference);
+            
+            const result = await memoryService.remember({
+              input: `User preference: ${preference}`,
+              context: {
+                userId: 'default-user',
+                workspaceId: mcpState.selectedWorkspace?.id,
+                conversationId: mcpState.currentConversationId || 'new',
+                timestamp: new Date(),
+                relevantEntities: []
+              },
+              type: MemoryType.PREFERENCE,
+              importance: 0.8
+            });
+
+            trackMemoryOperation('semantic extraction (user preference)', result.success, result.memoryId, result.error);
+          }
+        }
+      }
+
+      // Check if AI acknowledged remembering something and extract what it remembered
+      for (const pattern of aiRememberPatterns) {
+        const match = aiResponse.match(pattern);
+        if (match) {
+          let rememberedFact = match[1];
+          if (rememberedFact) {
+            rememberedFact = rememberedFact.replace(/[\.!,]$/, '').trim();
+            
+            if (rememberedFact.length > 5 && rememberedFact.length < 200) {
+              console.log('Extracting AI-acknowledged fact:', rememberedFact);
+              
+              const result = await memoryService.remember({
+                input: `Acknowledged fact: ${rememberedFact}`,
+                context: {
+                  userId: 'default-user',
+                  workspaceId: mcpState.selectedWorkspace?.id,
+                  conversationId: mcpState.currentConversationId || 'new',
+                  timestamp: new Date(),
+                  relevantEntities: []
+                },
+                type: MemoryType.FACT,
+                importance: 0.7
+              });
+
+              trackMemoryOperation('semantic extraction (AI acknowledged)', result.success, result.memoryId, result.error);
+            }
+          }
+        }
+      }
+
+      // Extract key concepts mentioned
+      const keywordPatterns = [
+        /(?:I work with|I use|I program in|I develop with) (.+)/i,
+        /(?:I'm learning|I'm studying) (.+)/i,
+        /(?:I'm interested in|I focus on) (.+)/i
+      ];
+
+      for (const pattern of keywordPatterns) {
+        const match = userInput.match(pattern);
+        if (match) {
+          let concept = match[1].replace(/[\.!,]$/, '').trim();
+          
+          if (concept && concept.length > 2 && concept.length < 100) {
+            console.log('Extracting concept:', concept);
+            
+            const result = await memoryService.addConcept(concept, `User mentioned: ${concept} (extracted from: "${userInput}")`);
+
+            trackMemoryOperation('concept extraction', result.success, result.memoryId, result.error);
+          }
+        }
+      }
+
+    } catch (error) {
+      console.error('Failed to extract semantic memories:', error);
+      trackMemoryOperation('semantic extraction', false, undefined, error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
 
   // Auto-scroll to bottom when new messages are added
   $effect(() => {
@@ -32,15 +170,38 @@
       };
       mcpState.addMessage(userMessage);
 
+      // Store user message in memory
+      const userMemoryResult = await memoryService.addConversationMessage(
+        mcpState.currentConversationId || 'new',
+        'user',
+        messageText
+      );
+      trackMemoryOperation('addConversationMessage (user)', userMemoryResult.success, undefined, userMemoryResult.error);
+
       // Auto-save conversation after adding user message
       await mcpState.saveConversation();
 
+      // Get relevant memory context
+      const searchResults = await memoryService.searchMemories({
+        query: messageText,
+        maxResults: 3,
+        minImportance: 0.3
+      });
+      let systemPrompt = mcpState.currentPersona.prompt;
+
+      if (searchResults.length > 0) {
+        const memoryContextText = searchResults
+          .map((result: any) => `[${result.memory.type}] ${result.memory.content}`)
+          .join('\n');
+        systemPrompt += `\n\nRelevant memories:\n${memoryContextText}`;
+      }
+
       // Prepare messages for API call
       const messages: ChatMessage[] = [
-        // System message with persona
+        // System message with persona and memory context
         {
           role: 'system',
-          content: mcpState.currentPersona.prompt
+          content: systemPrompt
         },
         // Add attached snippets as context
         ...mcpState.attachedSnippets.map((snippet: any) => ({
@@ -61,7 +222,25 @@
       });
 
       if (result.success && result.message) {
-        mcpState.addMessage(result.message);
+        // Add webSearchUsed and mathComputationUsed flags to the message if they were used
+        const messageWithFlags = {
+          ...result.message,
+          webSearchUsed: result.webSearchUsed || false,
+          mathComputationUsed: result.mathComputationUsed || false
+        };
+        mcpState.addMessage(messageWithFlags);
+
+        // Store AI response in memory
+        const aiMemoryResult = await memoryService.addConversationMessage(
+          mcpState.currentConversationId || 'new',
+          'assistant',
+          result.message.content
+        );
+        trackMemoryOperation('addConversationMessage (assistant)', aiMemoryResult.success, undefined, aiMemoryResult.error);
+
+        // Extract semantic information from the conversation
+        await extractSemanticMemories(messageText, result.message.content);
+
         // Auto-save after AI response
         await mcpState.saveConversation();
       } else {
@@ -85,6 +264,98 @@
 
   function clearConversation() {
     mcpState.newConversation();
+  }
+
+  async function copyConversation() {
+    const conversationData = {
+      timestamp: new Date().toISOString(),
+      conversationId: mcpState.currentConversationId,
+      workspace: mcpState.selectedWorkspace?.name || 'No workspace',
+      aiProvider: mcpState.selectedAIProvider,
+      aiModel: mcpState.selectedAIModel,
+      messageCount: mcpState.conversation.length,
+      messages: mcpState.conversation.map((msg: any, index: number) => ({
+        index: index + 1,
+        role: msg.role,
+        content: msg.content,
+        webSearchUsed: msg.webSearchUsed || false,
+        mathComputationUsed: msg.mathComputationUsed || false,
+        timestamp: new Date().toISOString(), // In a real app, you'd store actual timestamps
+        memoryOperations: memoryOperations.filter(op => op.messageIndex === index)
+      })),
+      memoryOperations: {
+        total: memoryOperations.length,
+        successful: memoryOperations.filter(op => op.success).length,
+        failed: memoryOperations.filter(op => !op.success).length,
+        operations: memoryOperations
+      }
+    };
+
+    const formattedConversation = `# MCP AI Workbench Conversation Export
+
+**Exported:** ${conversationData.timestamp}
+**Conversation ID:** ${conversationData.conversationId || 'New conversation'}
+**Workspace:** ${conversationData.workspace}
+**AI Provider:** ${conversationData.aiProvider}
+**AI Model:** ${conversationData.aiModel}
+**Total Messages:** ${conversationData.messageCount}
+
+## Memory Operations Summary
+**Total Operations:** ${conversationData.memoryOperations.total}
+**Successful:** ${conversationData.memoryOperations.successful}
+**Failed:** ${conversationData.memoryOperations.failed}
+
+---
+
+${conversationData.messages.map((msg: any) => `
+## Message ${msg.index} - ${msg.role.charAt(0).toUpperCase() + msg.role.slice(1)}
+${msg.webSearchUsed ? '🌐 **Web Search Used**\n' : ''}${msg.mathComputationUsed ? '🧮 **Mathematical Computation Used**\n' : ''}
+${msg.memoryOperations.length > 0 ? `🧠 **Memory Operations:**\n${msg.memoryOperations.map((op: any) => `- ${op.operation}: ${op.success ? '✅ Success' : '❌ Failed'}${op.error ? ` (${op.error})` : ''}${op.memoryId ? ` [ID: ${op.memoryId}]` : ''}`).join('\n')}\n\n` : ''}
+${msg.content}
+
+---
+`).join('')}
+
+## Detailed Memory Operations Log
+${conversationData.memoryOperations.operations.length > 0 ?
+  conversationData.memoryOperations.operations.map((op: any) => `
+**${op.timestamp}** - Message ${op.messageIndex + 1}
+- Operation: ${op.operation}
+- Status: ${op.success ? '✅ Success' : '❌ Failed'}
+${op.error ? `- Error: ${op.error}` : ''}
+${op.memoryId ? `- Memory ID: ${op.memoryId}` : ''}
+`).join('') : 'No memory operations recorded.'}
+
+*Exported from MCP AI Workbench*`;
+
+    try {
+      copyButtonState = 'copying';
+      await navigator.clipboard.writeText(formattedConversation);
+      copyButtonState = 'success';
+      console.log('Conversation copied to clipboard');
+
+      // Reset button state after 2 seconds
+      setTimeout(() => {
+        copyButtonState = 'idle';
+      }, 2000);
+    } catch (error) {
+      copyButtonState = 'error';
+      console.error('Failed to copy conversation:', error);
+
+      // Reset button state after 3 seconds
+      setTimeout(() => {
+        copyButtonState = 'idle';
+      }, 3000);
+
+      // Fallback: create a downloadable file
+      const blob = new Blob([formattedConversation], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `conversation-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   }
 
   let warningInfo = $derived(() => {
@@ -123,7 +394,53 @@
         </div>
       {/if}
 
+      <!-- Memory Panel Button -->
+      <button
+        class="btn-futuristic px-4 py-2 text-xs hover-lift"
+        onclick={() => showMemoryPanel = !showMemoryPanel}
+        title="Open Memory Center"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+        Memory
+      </button>
+
       {#if mcpState.conversation.length > 0}
+        <button
+          class="btn-futuristic px-4 py-2 text-xs hover-lift {copyButtonState === 'success' ? 'bg-green-500/20 border-green-400/30' : copyButtonState === 'error' ? 'bg-red-500/20 border-red-400/30' : ''}"
+          onclick={copyConversation}
+          disabled={isSending || copyButtonState === 'copying'}
+          title="Copy conversation to clipboard"
+        >
+          {#if copyButtonState === 'copying'}
+            <div class="flex items-center">
+              <div class="w-3 h-3 mr-1 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              Copying...
+            </div>
+          {:else if copyButtonState === 'success'}
+            <div class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Copied!
+            </div>
+          {:else if copyButtonState === 'error'}
+            <div class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Failed
+            </div>
+          {:else}
+            <div class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Copy
+            </div>
+          {/if}
+        </button>
         <button
           class="btn-futuristic px-4 py-2 text-xs hover-lift"
           onclick={clearConversation}
@@ -199,6 +516,7 @@
                     <div class="w-2 h-2 bg-white/60 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
                   </div>
                   <span class="text-white/60 text-xs">Thinking...</span>
+                  <!-- Web search indicator could be added here in the future -->
                 </div>
               </div>
             </div>
@@ -232,6 +550,23 @@
 
   <!-- Input Area -->
   <div class="flex-shrink-0">
+    <!-- Memory Integration -->
+    <MemoryIntegration
+      conversationId={mcpState.currentConversationId}
+      bind:currentMessage={currentMessage}
+      userId="default-user"
+      workspaceId={mcpState.selectedWorkspace?.id}
+      on:memoryContext={(e) => memoryContext = e.detail.context}
+      on:memoryStored={(e) => trackMemoryOperation('manual memory storage', true, e.detail.memoryId)}
+      on:episodeRecorded={(e) => trackMemoryOperation('episode recording', true, e.detail.episodeId)}
+    />
+
+    <!-- Minimal Search Progress Indicator -->
+    <SearchProgressIndicator isInputArea={true} />
+
     <InputBar bind:this={inputBar} onsend={sendMessage} />
   </div>
 </div>
+
+<!-- Memory Panel -->
+<MemoryPanel bind:isOpen={showMemoryPanel} userId="default-user" />

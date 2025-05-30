@@ -59,3 +59,119 @@ model WorkspaceFile {
 
   @@unique([workspaceId, filePath])
 }
+
+model Memory {
+  id            String   @id @default(cuid())
+  type          String   // MemoryType enum
+  content       String
+  importance    Float    @default(0.5)
+  confidence    Float    @default(0.8)
+  embedding     Json?    // Vector embedding
+  tags          Json     // String array
+  relationships Json     // String array of related memory IDs
+  createdAt     DateTime @default(now())
+  lastAccessed  DateTime @default(now())
+  accessCount   Int      @default(0)
+  source        Json     // MemorySource object
+  metadata      Json     // MemoryMetadata object
+  context       Json     // MemoryContext object
+
+  // Relations
+  userId         String?
+  conversationId String?
+  workspaceId    String?
+
+  @@index([type])
+  @@index([importance])
+  @@index([createdAt])
+  @@index([lastAccessed])
+  @@index([userId])
+  @@index([conversationId])
+  @@map("memories")
+}
+
+model ConversationMemory {
+  id             String                 @id @default(cuid())
+  conversationId String                 @unique
+  summary        String
+  keyTopics      Json                   // String array
+  participants   Json                   // String array
+  mood           String?
+  outcomes       Json                   // String array
+  followUpNeeded Boolean                @default(false)
+  messagesCount  Int                    @default(0)
+  importance     Float                  @default(0.5)
+  createdAt      DateTime               @default(now())
+  lastUpdated    DateTime               @updatedAt
+
+  // Relations
+  userId   String?
+  workspaceId String?
+  messages ConversationMessage[]
+
+  @@index([userId])
+  @@index([conversationId])
+  @@index([importance])
+  @@map("conversation_memories")
+}
+
+model ConversationMessage {
+  id                   String             @id @default(cuid())
+  conversationMemoryId String
+  conversationMemory   ConversationMemory @relation(fields: [conversationMemoryId], references: [id], onDelete: Cascade)
+  role                 String
+  content              String
+  timestamp            DateTime           @default(now())
+  importance           Float              @default(0.3)
+  extractedInfo        Json               // ExtractedInfo object
+
+  @@index([conversationMemoryId])
+  @@index([timestamp])
+  @@map("conversation_messages")
+}
+
+model UserPreference {
+  id         String   @id @default(cuid())
+  userId     String
+  category   String
+  preference String
+  strength   Float    @default(0.5)
+  source     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, category, preference])
+  @@index([userId])
+  @@index([category])
+  @@map("user_preferences")
+}
+
+model KnowledgeNode {
+  id            String   @id @default(cuid())
+  concept       String   @unique
+  description   String
+  confidence    Float    @default(0.8)
+  sources       Json     // String array
+  lastVerified  DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Self-referencing relationships
+  relationships Json // KnowledgeRelationship array
+
+  @@index([concept])
+  @@index([confidence])
+  @@map("knowledge_nodes")
+}
+
+model MemoryVector {
+  id        String   @id @default(cuid())
+  memoryId  String   @unique
+  vector    Json     // Number array - embedding vector
+  model     String   // Embedding model used
+  dimension Int      // Vector dimension
+  createdAt DateTime @default(now())
+
+  @@index([memoryId])
+  @@map("memory_vectors")
+}
