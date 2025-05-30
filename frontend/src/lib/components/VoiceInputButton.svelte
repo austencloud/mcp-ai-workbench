@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { voiceInputService } from '$lib/services/voiceInputService';
   import { voiceProcessingService } from '$lib/services/voiceProcessingService';
+  import { realTimeSpeechService } from '$lib/services/realTimeSpeechService';
+  import { windowFocusService } from '$lib/services/windowFocusService';
   import VoiceCorrectionDisplay from './VoiceCorrectionDisplay.svelte';
   import type {
     VoiceInputState,
@@ -16,6 +18,7 @@
     onError?: (error: string) => void;
     disabled?: boolean;
     enableAICorrection?: boolean;
+    enableRealTimeMode?: boolean; // New prop for real-time processing
     correctionOptions?: VoiceProcessingOptions;
   }
 
@@ -24,6 +27,7 @@
     onError,
     disabled = false,
     enableAICorrection = true,
+    enableRealTimeMode = true,
     correctionOptions = {
       enableGrammarCorrection: true,
       enableContextCorrection: true,
@@ -45,8 +49,7 @@
     language: 'en-US'
   });
 
-  let showTranscript = $state(false);
-  let transcriptTimeout: NodeJS.Timeout | null = null;
+
 
   // AI Processing state
   let isProcessingAI = $state(false);
@@ -55,62 +58,139 @@
   let processingConfidence = $state(0);
   let showCorrections = $state(false);
 
+  // Real-time speech state
+  let currentChunkId: string | null = null;
+  let realTimeState = $state({
+    currentText: '',
+    pendingCorrections: 0,
+    isProcessingAny: false
+  });
+
   // Subscribe to voice service state
   const unsubscribe = voiceInputService.state.subscribe((state) => {
     voiceState = state;
-    
-    // Show transcript when there's content
-    if (state.currentTranscript || state.finalTranscript) {
-      showTranscript = true;
-      
-      // Auto-hide transcript after inactivity
-      if (transcriptTimeout) {
-        clearTimeout(transcriptTimeout);
-      }
-      transcriptTimeout = setTimeout(() => {
-        if (!state.isRecording) {
-          showTranscript = false;
-        }
-      }, 3000);
+  });
+
+  // Subscribe to real-time speech service state
+  const unsubscribeRealTime = realTimeSpeechService.state.subscribe((state) => {
+    realTimeState = {
+      currentText: state.currentText,
+      pendingCorrections: state.pendingCorrections,
+      isProcessingAny: state.isProcessingAny
+    };
+
+    // Update transcription callback with real-time text
+    if (enableRealTimeMode && state.currentText !== realTimeState.currentText) {
+      onTranscription?.(state.currentText);
     }
   });
 
   onMount(() => {
+    // Initialize window focus service
+    windowFocusService.initialize();
+
     // Set up voice input event listeners
     voiceInputService.addEventListener({
       onResult: handleTranscriptionResult,
       onError: handleVoiceError,
       onStart: () => {
-        showTranscript = true;
+        if (enableRealTimeMode) {
+          realTimeSpeechService.startSession();
+          realTimeSpeechService.setProcessingOptions(correctionOptions);
+        }
       },
       onEnd: () => {
-        // Keep transcript visible briefly after recording ends
-        setTimeout(() => {
-          if (!voiceState.isRecording) {
-            showTranscript = false;
-          }
-        }, 2000);
+        if (enableRealTimeMode) {
+          realTimeSpeechService.endSession();
+        }
       }
     });
+
+    // Set up window focus/blur handlers for voice input
+    const unsubscribeFocus = windowFocusService.onFocus((hasFocus) => {
+      if (hasFocus && windowFocusService.shouldResumeVoice()) {
+        // Resume voice input if it was active before blur
+        resumeVoiceInput();
+      }
+    });
+
+    const unsubscribeBlur = windowFocusService.onBlur(() => {
+      // Pause voice input when window loses focus
+      if (voiceState.isRecording) {
+        windowFocusService.setVoiceActiveBeforeBlur(true);
+        pauseVoiceInput();
+      } else {
+        windowFocusService.setVoiceActiveBeforeBlur(false);
+      }
+    });
+
+    // Store unsubscribe functions for cleanup
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
   });
 
   onDestroy(() => {
     unsubscribe();
-    if (transcriptTimeout) {
-      clearTimeout(transcriptTimeout);
-    }
+    unsubscribeRealTime();
+    windowFocusService.destroy();
   });
 
-  async function handleTranscriptionResult(result: VoiceTranscriptionResult) {
-    if (result.isFinal && result.originalText.trim()) {
-      const finalText = result.originalText.trim();
+  /**
+   * Pause voice input (called when window loses focus)
+   */
+  function pauseVoiceInput() {
+    if (voiceState.isRecording) {
+      voiceInputService.stopRecording();
+    }
+  }
 
-      if (enableAICorrection) {
-        // Process with AI for corrections
-        await processWithAI(finalText);
+  /**
+   * Resume voice input (called when window regains focus)
+   */
+  async function resumeVoiceInput() {
+    if (!disabled && windowFocusService.isActive()) {
+      try {
+        await voiceInputService.startRecording();
+      } catch (error: any) {
+        onError?.(error.message || 'Failed to resume voice recording');
+        windowFocusService.setVoiceActiveBeforeBlur(false);
+      }
+    }
+  }
+
+  async function handleTranscriptionResult(result: VoiceTranscriptionResult) {
+    if (enableRealTimeMode) {
+      // Real-time mode: handle both interim and final results
+      if (result.isFinal) {
+        // Update or create final chunk
+        if (currentChunkId) {
+          realTimeSpeechService.updateChunk(currentChunkId, result.originalText, true, result.confidence);
+          currentChunkId = null;
+        } else {
+          realTimeSpeechService.addChunk(result.originalText, true, result.confidence);
+        }
       } else {
-        // Use original text directly
-        onTranscription?.(finalText);
+        // Update interim chunk
+        if (currentChunkId) {
+          realTimeSpeechService.updateChunk(currentChunkId, result.originalText, false, result.confidence);
+        } else {
+          currentChunkId = realTimeSpeechService.addChunk(result.originalText, false, result.confidence);
+        }
+      }
+    } else {
+      // Legacy mode: process final results only
+      if (result.isFinal && result.originalText.trim()) {
+        const finalText = result.originalText.trim();
+
+        if (enableAICorrection) {
+          // Process with AI for corrections
+          await processWithAI(finalText);
+        } else {
+          // Use original text directly
+          onTranscription?.(finalText);
+        }
       }
     }
   }
@@ -120,10 +200,17 @@
       isProcessingAI = true;
       showCorrections = false;
 
-      const response = await voiceProcessingService.processTranscription({
+      // Add timeout for AI processing (15 seconds)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('AI processing timeout')), 15000);
+      });
+
+      const processingPromise = voiceProcessingService.processTranscription({
         originalText: text,
         options: correctionOptions
       });
+
+      const response = await Promise.race([processingPromise, timeoutPromise]);
 
       if (response.success) {
         correctedText = response.correctedText;
@@ -143,9 +230,15 @@
         onError?.(`AI processing failed: ${response.error}`);
       }
     } catch (error: any) {
+      console.error('AI processing error:', error);
       // Fallback to original text on error
       onTranscription?.(text);
-      onError?.(`AI processing error: ${error.message}`);
+
+      if (error.message === 'AI processing timeout') {
+        onError?.('AI processing timed out. Using original text.');
+      } else {
+        onError?.(`AI processing error: ${error.message}`);
+      }
     } finally {
       isProcessingAI = false;
     }
@@ -174,7 +267,14 @@
     try {
       if (voiceState.isRecording) {
         voiceInputService.stopRecording();
+        windowFocusService.setVoiceActiveBeforeBlur(false);
       } else {
+        // Check if window has focus before starting
+        if (!windowFocusService.isActive()) {
+          onError?.('Please focus the window before starting voice input');
+          return;
+        }
+
         if (!voiceState.hasPermission) {
           const granted = await voiceInputService.requestPermission();
           if (!granted) {
@@ -209,13 +309,16 @@
     if (!voiceState.isSupported) {
       return 'Voice input not supported in this browser';
     }
+    if (!windowFocusService.isActive()) {
+      return 'Focus the window to enable voice input';
+    }
     if (!voiceState.hasPermission) {
       return 'Click to grant microphone permission';
     }
     if (voiceState.isRecording) {
-      return 'Click to stop recording (or press Ctrl+Shift+V)';
+      return 'Click to stop recording (or press Ctrl+Shift+V) - Auto-pauses when window loses focus';
     }
-    return 'Click to start voice input (or press Ctrl+Shift+V)';
+    return 'Click to start voice input (or press Ctrl+Shift+V) - Auto-pauses when window loses focus';
   }
 
   // Keyboard shortcut handler
@@ -239,69 +342,38 @@
     aria-label={voiceState.isRecording ? 'Stop voice recording' : 'Start voice recording'}
     aria-pressed={voiceState.isRecording}
   >
-    {#if voiceState.isProcessing || isProcessingAI}
-      <!-- Processing indicator -->
-      <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-    {:else if voiceState.isRecording}
-      <!-- Recording indicator -->
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-      </svg>
-    {:else}
-      <!-- Microphone icon -->
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-      </svg>
-    {/if}
-  </button>
-
-  <!-- Real-time Transcript Display -->
-  {#if showTranscript && (voiceState.currentTranscript || voiceState.finalTranscript)}
-    <div 
-      class="absolute bottom-full mb-2 left-0 right-0 glass rounded-lg p-3 min-h-[2rem] max-w-sm"
-      role="status"
-      aria-live="polite"
-      aria-label="Voice transcription"
-    >
-      <div class="text-xs text-white/60 mb-1 flex items-center justify-between">
-        <span>Voice Input</span>
-        {#if voiceState.confidence > 0}
-          <span class="text-white/40">
-            {Math.round(voiceState.confidence * 100)}% confidence
-          </span>
-        {/if}
-      </div>
-      
-      <div class="text-sm text-white/90 min-h-[1.25rem]">
-        {#if voiceState.finalTranscript}
-          <span class="text-white">{voiceState.finalTranscript}</span>
-        {/if}
-        {#if voiceState.currentTranscript}
-          <span class="text-white/70 italic">{voiceState.currentTranscript}</span>
-        {/if}
-        {#if !voiceState.finalTranscript && !voiceState.currentTranscript && voiceState.isRecording}
-          <span class="text-white/50 italic">Listening...</span>
-        {/if}
-      </div>
-
-      <!-- AI Processing indicator -->
-      {#if isProcessingAI}
-        <div class="flex items-center gap-1 mt-2">
-          <div class="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-          <span class="text-xs text-blue-300">AI Processing...</span>
-        </div>
+    <div class="relative">
+      {#if voiceState.isProcessing || isProcessingAI}
+        <!-- Processing indicator -->
+        <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+      {:else if voiceState.isRecording}
+        <!-- Recording indicator -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+      {:else}
+        <!-- Microphone icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+        </svg>
       {/if}
 
-      <!-- Visual recording indicator -->
-      {#if voiceState.isRecording}
-        <div class="flex items-center gap-1 mt-2">
-          <div class="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-          <span class="text-xs text-red-300">Recording</span>
+      <!-- Small AI processing indicator dot -->
+      {#if isProcessingAI || (enableRealTimeMode && realTimeState.isProcessingAny)}
+        <div class="absolute -top-1 -right-1 w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+      {/if}
+
+      <!-- Pending corrections indicator -->
+      {#if enableRealTimeMode && realTimeState.pendingCorrections > 0}
+        <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full text-xs flex items-center justify-center text-black font-bold">
+          {realTimeState.pendingCorrections}
         </div>
       {/if}
     </div>
-  {/if}
+  </button>
+
+
 
   <!-- AI Correction Display -->
   {#if showCorrections && corrections.length > 0}
@@ -353,4 +425,6 @@
   .neon-glow:hover {
     box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
   }
+
+
 </style>

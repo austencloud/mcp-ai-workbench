@@ -30,7 +30,8 @@
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/state": "^6.5.2",
     "@codemirror/theme-one-dark": "^6.1.2",
-    "@codemirror/view": "^6.36.8"
+    "@codemirror/view": "^6.36.8",
+    "set-cookie-parser": "^2.7.1"
   },
   "type": "module"
 }

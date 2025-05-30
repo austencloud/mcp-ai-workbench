@@ -14,6 +14,8 @@
     corrections: VoiceCorrection[];
     confidence: number;
     showDiff?: boolean;
+    onAccept?: (text: string) => void;
+    onReject?: () => void;
   }
 
   let {
@@ -21,7 +23,9 @@
     correctedText,
     corrections,
     confidence,
-    showDiff = false
+    showDiff = false,
+    onAccept,
+    onReject
   }: Props = $props();
 
   function getConfidenceColor(confidence: number): string {
@@ -103,6 +107,28 @@
       </div>
     </div>
   {/if}
+
+  <!-- Action Buttons -->
+  {#if onAccept || onReject}
+    <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+      {#if onReject}
+        <button
+          onclick={() => onReject?.()}
+          class="correction-btn correction-btn-reject"
+        >
+          Use Original
+        </button>
+      {/if}
+      {#if onAccept}
+        <button
+          onclick={() => onAccept?.(correctedText)}
+          class="correction-btn correction-btn-accept"
+        >
+          Use Corrected
+        </button>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -111,5 +137,34 @@
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .correction-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid;
+  }
+
+  .correction-btn-reject {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  .correction-btn-reject:hover {
+    background: rgba(239, 68, 68, 0.3);
+  }
+
+  .correction-btn-accept {
+    background: rgba(34, 197, 94, 0.2);
+    color: #86efac;
+    border-color: rgba(34, 197, 94, 0.3);
+  }
+
+  .correction-btn-accept:hover {
+    background: rgba(34, 197, 94, 0.3);
   }
 </style>

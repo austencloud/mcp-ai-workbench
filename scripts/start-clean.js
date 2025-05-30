@@ -45,7 +45,11 @@ cleanupPorts.on("close", () => {
 
   backend.stdout.on("data", (data) => {
     const output = data.toString();
-    if (output.includes("Backend server running") && !backendReady) {
+    if (
+      (output.includes("Backend server running") ||
+        output.includes("✅ Backend server running")) &&
+      !backendReady
+    ) {
       console.log(`${colors.green}✅ Backend ready${colors.reset}`);
       backendReady = true;
       checkAllReady();
@@ -54,7 +58,7 @@ cleanupPorts.on("close", () => {
 
   frontend.stdout.on("data", (data) => {
     const output = data.toString();
-    if (output.includes("ready in") && !frontendReady) {
+    if ((output.includes("ready in") || output.includes("Local:")) && !frontendReady) {
       console.log(`${colors.green}✅ Frontend ready${colors.reset}`);
       frontendReady = true;
       checkAllReady();

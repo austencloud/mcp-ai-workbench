@@ -1,4 +1,4 @@
-import { writable, type Writable } from 'svelte/store';
+import { writable, type Writable } from "svelte/store";
 import type {
   VoiceInputState,
   VoiceInputConfig,
@@ -7,8 +7,8 @@ import type {
   VoiceErrorCode,
   VoiceInputEvents,
   SpeechRecognitionEvent,
-  SpeechRecognitionErrorEvent
-} from '../types/voiceInput';
+  SpeechRecognitionErrorEvent,
+} from "../types/voiceInput";
 
 class VoiceInputService {
   private recognition: SpeechRecognition | null = null;
@@ -22,20 +22,20 @@ class VoiceInputService {
     isProcessing: false,
     isSupported: false,
     hasPermission: false,
-    currentTranscript: '',
-    finalTranscript: '',
+    currentTranscript: "",
+    finalTranscript: "",
     confidence: 0,
     error: null,
-    language: 'en-US'
+    language: "en-US",
   });
 
   constructor(config?: Partial<VoiceInputConfig>) {
     this.config = {
-      language: 'en-US',
+      language: "en-US",
       continuous: true,
       interimResults: true,
       maxAlternatives: 1,
-      ...config
+      ...config,
     };
 
     this.initialize();
@@ -48,7 +48,10 @@ class VoiceInputService {
       this.updateState({ isSupported });
 
       if (!isSupported) {
-        throw this.createError('NOT_SUPPORTED', 'Speech recognition is not supported in this browser');
+        throw this.createError(
+          "NOT_SUPPORTED",
+          "Speech recognition is not supported in this browser"
+        );
       }
 
       // Check microphone permission
@@ -76,16 +79,17 @@ class VoiceInputService {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track) => track.stop());
       return true;
     } catch (error) {
-      console.warn('Microphone permission check failed:', error);
+      console.warn("Microphone permission check failed:", error);
       return false;
     }
   }
 
   private setupSpeechRecognition(): void {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
     this.recognition = new SpeechRecognition();
 
     // Configure recognition
@@ -118,9 +122,9 @@ class VoiceInputService {
     };
 
     this.recognition.onnomatch = () => {
-      this.updateState({ 
-        error: 'No speech was recognized. Please try again.',
-        isProcessing: false 
+      this.updateState({
+        error: "No speech was recognized. Please try again.",
+        isProcessing: false,
       });
     };
 
@@ -134,9 +138,10 @@ class VoiceInputService {
   }
 
   private handleRecognitionResult(event: SpeechRecognitionEvent): void {
-    let interimTranscript = '';
-    let finalTranscript = '';
+    let interimTranscript = "";
+    let finalTranscript = "";
     let maxConfidence = 0;
+    let hasNewFinal = false;
 
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const result = event.results[i];
@@ -146,6 +151,7 @@ class VoiceInputService {
       if (result.isFinal) {
         finalTranscript += transcript;
         maxConfidence = Math.max(maxConfidence, confidence);
+        hasNewFinal = true;
       } else {
         interimTranscript += transcript;
       }
@@ -154,29 +160,55 @@ class VoiceInputService {
     // Update state with current transcription
     this.updateState({
       currentTranscript: interimTranscript,
-      finalTranscript: finalTranscript,
+      finalTranscript: this.state.finalTranscript + finalTranscript,
       confidence: maxConfidence,
-      error: null
+      error: null,
     });
 
-    // Create transcription result
-    const transcriptionResult: VoiceTranscriptionResult = {
-      originalText: finalTranscript || interimTranscript,
-      confidence: maxConfidence,
-      isFinal: !!finalTranscript,
-      timestamp: Date.now(),
-      alternatives: this.extractAlternatives(event.results, event.resultIndex)
-    };
+    // Create transcription result for interim updates
+    if (interimTranscript) {
+      const interimResult: VoiceTranscriptionResult = {
+        originalText: interimTranscript,
+        confidence: maxConfidence,
+        isFinal: false,
+        timestamp: Date.now(),
+        alternatives: this.extractAlternatives(
+          event.results,
+          event.resultIndex
+        ),
+      };
+      this.events.onResult?.(interimResult);
+    }
 
-    this.events.onResult?.(transcriptionResult);
+    // Create transcription result for final text
+    if (hasNewFinal && finalTranscript.trim()) {
+      const finalResult: VoiceTranscriptionResult = {
+        originalText: finalTranscript.trim(),
+        confidence: maxConfidence,
+        isFinal: true,
+        timestamp: Date.now(),
+        alternatives: this.extractAlternatives(
+          event.results,
+          event.resultIndex
+        ),
+      };
+      this.events.onResult?.(finalResult);
+    }
   }
 
-  private extractAlternatives(results: SpeechRecognitionResultList, startIndex: number): string[] {
+  private extractAlternatives(
+    results: SpeechRecognitionResultList,
+    startIndex: number
+  ): string[] {
     const alternatives: string[] = [];
-    
+
     for (let i = startIndex; i < results.length; i++) {
       const result = results[i];
-      for (let j = 1; j < result.length && j < this.config.maxAlternatives; j++) {
+      for (
+        let j = 1;
+        j < result.length && j < this.config.maxAlternatives;
+        j++
+      ) {
         if (result[j] && result[j].transcript) {
           alternatives.push(result[j].transcript);
         }
@@ -191,56 +223,64 @@ class VoiceInputService {
     let message: string;
 
     switch (event.error) {
-      case 'not-allowed':
-        errorCode = 'PERMISSION_DENIED';
-        message = 'Microphone access was denied. Please allow microphone access and try again.';
+      case "not-allowed":
+        errorCode = "PERMISSION_DENIED";
+        message =
+          "Microphone access was denied. Please allow microphone access and try again.";
         this.updateState({ hasPermission: false });
         break;
-      case 'no-speech':
-        errorCode = 'RECOGNITION_ERROR';
-        message = 'No speech was detected. Please try speaking again.';
+      case "no-speech":
+        errorCode = "RECOGNITION_ERROR";
+        message = "No speech was detected. Please try speaking again.";
         break;
-      case 'audio-capture':
-        errorCode = 'MICROPHONE_NOT_FOUND';
-        message = 'No microphone was found. Please check your microphone connection.';
+      case "audio-capture":
+        errorCode = "MICROPHONE_NOT_FOUND";
+        message =
+          "No microphone was found. Please check your microphone connection.";
         break;
-      case 'network':
-        errorCode = 'NETWORK_ERROR';
-        message = 'Network error occurred during speech recognition.';
+      case "network":
+        errorCode = "NETWORK_ERROR";
+        message = "Network error occurred during speech recognition.";
         break;
-      case 'aborted':
-        errorCode = 'RECOGNITION_ERROR';
-        message = 'Speech recognition was aborted.';
+      case "aborted":
+        errorCode = "RECOGNITION_ERROR";
+        message = "Speech recognition was aborted.";
         break;
       default:
-        errorCode = 'RECOGNITION_ERROR';
+        errorCode = "RECOGNITION_ERROR";
         message = `Speech recognition error: ${event.error}`;
     }
 
-    const error = this.createError(errorCode, message, { originalError: event });
+    const error = this.createError(errorCode, message, {
+      originalError: event,
+    });
     this.handleError(error);
   }
 
-  private createError(code: VoiceErrorCode, message: string, details?: any): VoiceInputError {
+  private createError(
+    code: VoiceErrorCode,
+    message: string,
+    details?: any
+  ): VoiceInputError {
     return {
       code,
       message,
       details,
-      recoverable: code !== 'NOT_SUPPORTED' && code !== 'PERMISSION_DENIED'
+      recoverable: code !== "NOT_SUPPORTED" && code !== "PERMISSION_DENIED",
     };
   }
 
   private handleError(error: VoiceInputError): void {
-    this.updateState({ 
-      error: error.message, 
-      isRecording: false, 
-      isProcessing: false 
+    this.updateState({
+      error: error.message,
+      isRecording: false,
+      isProcessing: false,
     });
     this.events.onError?.(error);
   }
 
   private updateState(updates: Partial<VoiceInputState>): void {
-    this.state.update(current => ({ ...current, ...updates }));
+    this.state.update((current) => ({ ...current, ...updates }));
   }
 
   // Public API methods
@@ -250,20 +290,27 @@ class VoiceInputService {
     }
 
     if (!this.recognition) {
-      throw this.createError('NOT_SUPPORTED', 'Speech recognition is not available');
+      throw this.createError(
+        "NOT_SUPPORTED",
+        "Speech recognition is not available"
+      );
     }
 
     try {
       // Clear previous transcripts
       this.updateState({
-        currentTranscript: '',
-        finalTranscript: '',
-        error: null
+        currentTranscript: "",
+        finalTranscript: "",
+        error: null,
       });
 
       this.recognition.start();
     } catch (error: any) {
-      const voiceError = this.createError('RECOGNITION_ERROR', 'Failed to start recording', error);
+      const voiceError = this.createError(
+        "RECOGNITION_ERROR",
+        "Failed to start recording",
+        error
+      );
       this.handleError(voiceError);
       throw voiceError;
     }
@@ -284,7 +331,7 @@ class VoiceInputService {
   public setLanguage(language: string): void {
     this.config.language = language;
     this.updateState({ language });
-    
+
     if (this.recognition) {
       this.recognition.lang = language;
     }
@@ -303,11 +350,11 @@ class VoiceInputService {
       const hasPermission = await this.checkMicrophonePermission();
       this.updateState({ hasPermission });
       this.events.onPermissionChange?.(hasPermission);
-      
+
       if (hasPermission && !this.recognition) {
         this.setupSpeechRecognition();
       }
-      
+
       return hasPermission;
     } catch (error) {
       return false;

@@ -3,9 +3,10 @@
 
   interface Props {
     onsend?: (message: string) => void;
+    appendVoiceInput?: boolean; // Control whether to append or replace voice input
   }
 
-  let { onsend }: Props = $props();
+  let { onsend, appendVoiceInput = true }: Props = $props();
 
   let message = $state('');
   let isDisabled = $state(false);
@@ -32,8 +33,13 @@
   }
 
   function handleVoiceTranscription(text: string) {
-    // Replace message with voice transcription (don't append to avoid duplicates)
-    message = text;
+    if (appendVoiceInput && message.trim()) {
+      // Append to existing text with a space separator
+      message = message.trim() + ' ' + text;
+    } else {
+      // Replace message with voice transcription
+      message = text;
+    }
 
     // Auto-resize textarea
     if (textareaElement) {
@@ -81,6 +87,7 @@
         onError={handleVoiceError}
         disabled={isDisabled}
         enableAICorrection={true}
+        enableRealTimeMode={true}
         correctionOptions={{
           enableGrammarCorrection: true,
           enableContextCorrection: true,

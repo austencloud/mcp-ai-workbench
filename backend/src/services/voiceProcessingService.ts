@@ -182,7 +182,7 @@ If no corrections are needed, return the original text with an empty corrections
   }
 
   /**
-   * Get AI correction using the multi-provider system
+   * Get AI correction using the multi-provider system with timeout
    */
   private async getAICorrection(
     prompt: string,
@@ -200,28 +200,75 @@ If no corrections are needed, return the original text with an empty corrections
       },
     ];
 
-    // Use fastest available provider for real-time corrections
-    const preferredProviders = ["google", "deepseek", "openai", "anthropic"];
+    // Use Ollama first for local processing, then fallback to cloud providers
+    const preferredProviders = [
+      process.env.VOICE_PROCESSING_PROVIDER || "ollama",
+      "ollama",
+      "google",
+      "deepseek",
+      "openai",
+      "anthropic",
+    ].filter((provider, index, arr) => arr.indexOf(provider) === index); // Remove duplicates
+
+    const timeout = parseInt(process.env.VOICE_PROCESSING_TIMEOUT || "10000");
 
     for (const provider of preferredProviders) {
       try {
-        const response = await this.aiProvider.chat(messages, {
+        console.log(
+          `[Voice Processing] Attempting to use ${provider} with model: ${this.getOptimalModel(
+            provider
+          )}`
+        );
+
+        // Create timeout promise
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(
+            () => reject(new Error(`${provider} processing timeout`)),
+            timeout
+          );
+        });
+
+        // Race the AI request against timeout
+        const aiPromise = this.aiProvider.chat(messages, {
           provider,
           model: this.getOptimalModel(provider),
           enableWebSearch: false, // Disable web search for voice processing
         });
 
+        const response = await Promise.race([aiPromise, timeoutPromise]);
+
         if (response.success) {
+          console.log(
+            `[Voice Processing] Successfully used ${provider} for voice correction`
+          );
           return response;
         }
       } catch (error) {
-        console.warn(`Voice processing failed with ${provider}:`, error);
+        console.warn(`[Voice Processing] Failed with ${provider}:`, error);
         continue;
       }
     }
 
-    // Fallback to any available provider
-    return await this.aiProvider.chat(messages, { enableWebSearch: false });
+    // Fallback to any available provider with timeout
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error("Fallback processing timeout")),
+          timeout
+        );
+      });
+
+      const fallbackPromise = this.aiProvider.chat(messages, {
+        enableWebSearch: false,
+      });
+      return await Promise.race([fallbackPromise, timeoutPromise]);
+    } catch (error) {
+      console.warn(
+        "All voice processing providers failed or timed out:",
+        error
+      );
+      throw error;
+    }
   }
 
   /**
@@ -229,10 +276,14 @@ If no corrections are needed, return the original text with an empty corrections
    */
   private getOptimalModel(provider: string): string {
     const modelMap: Record<string, string> = {
-      google: "gemini-1.5-flash", // Fast and efficient
-      deepseek: "deepseek-chat",
-      openai: "gpt-4o-mini", // Faster than full GPT-4
-      anthropic: "claude-3-haiku-20240307", // Fastest Claude model
+      ollama:
+        process.env.VOICE_PROCESSING_MODEL ||
+        process.env.OLLAMA_MODEL ||
+        "llama3.2:latest", // Local model for fast processing
+      google: process.env.GOOGLE_MODEL || "gemini-1.5-flash", // Fast and efficient
+      deepseek: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+      openai: process.env.OPENAI_MODEL || "gpt-4o-mini", // Faster than full GPT-4
+      anthropic: process.env.ANTHROPIC_MODEL || "claude-3-haiku-20240307", // Fastest Claude model
     };
 
     return modelMap[provider] || "";
