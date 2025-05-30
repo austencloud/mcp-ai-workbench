@@ -321,7 +321,10 @@ export class VectorMemoryService {
         );
       });
 
-      console.log(`Vector index initialized with ${vectors.length} vectors`);
+      // Only log if there are vectors to avoid cluttering startup
+      if (vectors.length > 0) {
+        console.log(`Vector index initialized with ${vectors.length} vectors`);
+      }
     } catch (error) {
       console.error("Error initializing vector index:", error);
     }

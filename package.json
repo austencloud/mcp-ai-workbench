@@ -4,7 +4,7 @@
   "description": "MCP AI Workbench - AI-powered workspace management and chat interface",
   "private": true,
   "scripts": {
-    "dev": "npm run cleanup:ports && concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "node scripts/start-clean.js",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && npm run dev",
     "dev:clean": "npm run cleanup:ports && npm run dev",
@@ -17,8 +17,8 @@
     "db:migrate": "cd backend && npm run migrate",
     "db:generate": "cd backend && npm run generate",
     "db:setup": "npm run db:generate && npm run db:migrate",
-    "start": "npm run cleanup:ports && concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "start:prod": "npm run cleanup:ports && concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start": "node scripts/start-clean.js",
+    "start:prod": "npm run cleanup:ports && concurrently --raw --kill-others-on-fail \"npm run start:backend\" \"npm run start:frontend\"",
     "start:backend": "cd backend && npm start",
     "start:frontend": "cd frontend && npm run preview"
   },

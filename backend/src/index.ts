@@ -17,7 +17,11 @@ import * as voiceController from "./controllers/voiceController";
 // Load environment variables
 dotenv.config();
 
-const app = Fastify({ logger: true });
+const app = Fastify({
+  logger: {
+    level: "warn", // Only log warnings and errors, not all requests
+  },
+});
 
 // Enable CORS for frontend
 app.register(require("@fastify/cors"), {
@@ -107,6 +111,9 @@ app.post("/rpc", async (request, reply) => {
         break;
       case "getSavedPreferences":
         result = await chatController.getSavedPreferences();
+        break;
+      case "saveProviderPreference":
+        result = await chatController.saveProviderPreference(params);
         break;
       // Web Browsing endpoints
       case "webSearch":
@@ -407,14 +414,12 @@ const isPortInUse = (port: number): Promise<boolean> => {
 
 const killProcessOnPort = async (port: number): Promise<boolean> => {
   try {
-    console.log(`🔍 Checking for processes on port ${port}...`);
     const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
     const lines = stdout
       .split("\n")
       .filter((line) => line.includes("LISTENING"));
 
     if (lines.length === 0) {
-      console.log(`✅ No processes found on port ${port}`);
       return true;
     }
 
@@ -423,42 +428,27 @@ const killProcessOnPort = async (port: number): Promise<boolean> => {
       const parts = line.trim().split(/\s+/);
       const pid = parts[parts.length - 1];
       if (pid && pid !== "0") {
-        console.log(`🔪 Killing process ${pid} on port ${port}`);
         try {
           await execAsync(`taskkill /PID ${pid} /F`);
           killedAny = true;
-          console.log(`✅ Successfully killed process ${pid}`);
         } catch (killError) {
-          console.log(
-            `❌ Failed to kill process ${pid}:`,
-            (killError as Error).message
-          );
+          // Silent fail
         }
       }
     }
 
     if (killedAny) {
-      // Wait longer for processes to fully terminate
-      console.log(`⏳ Waiting for processes to terminate...`);
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
     return killedAny;
   } catch (error) {
-    console.log(
-      `⚠️  Could not check/kill processes on port ${port}:`,
-      (error as Error).message
-    );
     return false;
   }
 };
 
 const forceKillAllOnPort = async (port: number): Promise<void> => {
   try {
-    // More aggressive approach - kill all processes using the port
-    console.log(`🔥 Force killing ALL processes on port ${port}...`);
-
-    // Try multiple methods to ensure the port is freed
     const commands = [
       `netstat -ano | findstr :${port}`,
       `wmic process where "commandline like '%${port}%'" get processid /value`,
@@ -473,15 +463,12 @@ const forceKillAllOnPort = async (port: number): Promise<void> => {
         for (const pid of pids) {
           if (pid && pid !== "0") {
             try {
-              await execAsync(`taskkill /PID ${pid} /F /T`); // /T kills child processes too
-              console.log(`💀 Force killed process tree ${pid}`);
+              await execAsync(`taskkill /PID ${pid} /F /T`);
             } catch (e) {
-              // Try alternative kill method
               try {
                 await execAsync(`wmic process ${pid} delete`);
-                console.log(`💀 WMIC killed process ${pid}`);
               } catch (e2) {
-                console.log(`⚠️  Could not kill process ${pid}`);
+                // Silent fail
               }
             }
           }
@@ -491,10 +478,9 @@ const forceKillAllOnPort = async (port: number): Promise<void> => {
       }
     }
 
-    // Final wait
     await new Promise((resolve) => setTimeout(resolve, 2000));
   } catch (error) {
-    console.log(`❌ Force kill failed:`, (error as Error).message);
+    // Silent fail
   }
 };
 
@@ -539,72 +525,41 @@ const start = async () => {
     let attempts = 0;
     const maxAttempts = 3;
 
-    console.log(`🚀 Starting MCP Backend server...`);
-    console.log(`🎯 Target port: ${port}`);
+    console.log(`🚀 Starting MCP Backend server on port ${port}...`);
 
     while (attempts < maxAttempts) {
       attempts++;
-      console.log(
-        `\n📍 Attempt ${attempts}/${maxAttempts} to start on port ${port}`
-      );
 
       if (await isPortInUse(port)) {
-        console.log(`⚠️  Port ${port} is in use`);
-        console.log(`🔧 Attempting to free port ${port}...`);
-
         const killed = await killProcessOnPort(port);
 
         if (!killed || (await isPortInUse(port))) {
-          console.log(`🔥 Standard kill failed, trying force kill...`);
           await forceKillAllOnPort(port);
-
-          // Wait and check again
           await new Promise((resolve) => setTimeout(resolve, 2000));
 
           if (await isPortInUse(port)) {
             if (attempts < maxAttempts) {
-              console.log(`❌ Port ${port} still in use, retrying...`);
               continue;
             } else {
-              console.log(
-                `❌ Could not free port ${port} after ${maxAttempts} attempts`
-              );
-              console.log(`🔍 Finding alternative port...`);
               port = await findAvailablePort(4000);
-              console.log(`✅ Using port ${port} instead`);
               break;
             }
           }
         }
-
-        console.log(`✅ Port ${port} is now available`);
-      } else {
-        console.log(`✅ Port ${port} is available`);
       }
 
       try {
         await app.listen({ port, host: "0.0.0.0" });
-        console.log(
-          `\n🎉 SUCCESS! MCP Backend server listening on http://localhost:${port}`
-        );
-        console.log(`📡 JSON-RPC endpoint: http://localhost:${port}/rpc`);
-        console.log(`🏥 Health check: http://localhost:${port}/health`);
-        console.log(`\n✨ Server ready for requests!`);
+        console.log(`✅ Backend server running on http://localhost:${port}`);
+        console.log(`📡 JSON-RPC: http://localhost:${port}/rpc`);
+        console.log(`🏥 Health: http://localhost:${port}/health\n`);
         return;
       } catch (error) {
-        console.log(
-          `❌ Failed to start server on port ${port}:`,
-          (error as Error).message
-        );
-
         if (attempts < maxAttempts) {
-          console.log(`🔄 Retrying with different approach...`);
           await new Promise((resolve) => setTimeout(resolve, 1000));
         } else {
-          console.log(`🔍 Finding alternative port...`);
           port = await findAvailablePort(4000);
-          console.log(`✅ Trying port ${port} instead`);
-          attempts = 0; // Reset attempts for new port
+          attempts = 0;
         }
       }
     }

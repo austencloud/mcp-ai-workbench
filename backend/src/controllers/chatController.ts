@@ -141,6 +141,19 @@ export const chatController = {
     }
   },
 
+  async saveProviderPreference(params: { provider: string; model?: string }) {
+    try {
+      const aiServiceInstance = aiService as any;
+      aiServiceInstance.saveProviderPreference(params.provider, params.model);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+
   async streamChat({ messages, workspace }: ChatParams) {
     // TODO: Implement streaming chat for real-time responses
     // This will be implemented in Phase 2

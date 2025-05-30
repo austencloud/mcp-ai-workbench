@@ -223,6 +223,13 @@ class MCPClient {
     return this.call("getSavedPreferences");
   }
 
+  async saveProviderPreference(params: {
+    provider: string;
+    model?: string;
+  }): Promise<{ success: boolean }> {
+    return this.call("saveProviderPreference", params);
+  }
+
   // Conversation methods
   async getConversations(params: {
     workspaceId: number;

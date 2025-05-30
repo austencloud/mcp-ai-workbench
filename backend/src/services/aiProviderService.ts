@@ -509,16 +509,22 @@ export class AIProviderService {
         const savedModel = preferences.model;
 
         if (savedProvider && this.providers.has(savedProvider)) {
-          console.log(
-            `[AI] Loaded saved provider: ${savedProvider} with model: ${
-              savedModel || "default"
-            }`
-          );
+          // Only log in development mode
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              `[AI] Loaded saved provider: ${savedProvider} with model: ${
+                savedModel || "default"
+              }`
+            );
+          }
           return savedProvider;
         }
       }
     } catch (error) {
-      console.log(`[AI] Could not load saved preferences: ${error}`);
+      // Silent fail for production
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[AI] Could not load saved preferences: ${error}`);
+      }
     }
     return null;
   }

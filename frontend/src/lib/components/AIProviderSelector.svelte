@@ -102,6 +102,14 @@
     selectedProvider = provider.toLowerCase();
     selectedModel = model;
     showProviders = false;
+    
+    // Save the preference to backend
+    mcp.saveProviderPreference({
+      provider: provider.toLowerCase(),
+      model: model
+    }).catch(error => {
+      console.error('Failed to save provider preference:', error);
+    });
   }
 
   function handleClickOutside(event: MouseEvent) {

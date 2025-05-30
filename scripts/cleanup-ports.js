@@ -16,8 +16,6 @@ const PORTS_TO_CLEAN = [
 
 async function killProcessOnPort(port) {
   try {
-    console.log(`🔍 Checking port ${port}...`);
-
     // Get all processes using the port
     const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
     const lines = stdout
@@ -25,11 +23,8 @@ async function killProcessOnPort(port) {
       .filter((line) => line.includes("LISTENING"));
 
     if (lines.length === 0) {
-      console.log(`✅ Port ${port} is clean`);
       return true;
     }
-
-    console.log(`⚠️  Found ${lines.length} process(es) on port ${port}`);
 
     const pids = new Set();
     for (const line of lines) {
@@ -42,16 +37,12 @@ async function killProcessOnPort(port) {
 
     for (const pid of pids) {
       try {
-        console.log(`🔪 Killing process ${pid} on port ${port}`);
         await execAsync(`taskkill /PID ${pid} /F /T`);
-        console.log(`✅ Killed process ${pid}`);
       } catch (killError) {
-        console.log(`⚠️  Failed to kill ${pid}, trying alternative method...`);
         try {
           await execAsync(`wmic process ${pid} delete`);
-          console.log(`✅ WMIC killed process ${pid}`);
         } catch (wmicError) {
-          console.log(`❌ Could not kill process ${pid}`);
+          // Silent fail
         }
       }
     }
@@ -62,19 +53,14 @@ async function killProcessOnPort(port) {
   } catch (error) {
     // If netstat finds nothing, that means the port is clean
     if (error.code === 1 || error.message.includes("Command failed")) {
-      console.log(`✅ Port ${port} is clean`);
       return true;
     }
-    console.log(`⚠️  Error checking port ${port}:`, error.message);
     return false;
   }
 }
 
 async function cleanupAllPorts() {
-  console.log("🧹 MCP AI Workbench Port Cleanup");
-  console.log("================================");
-  console.log(`Cleaning ports: ${PORTS_TO_CLEAN.join(", ")}`);
-  console.log("");
+  console.log("🧹 Cleaning ports...");
 
   let cleaned = 0;
   let failed = 0;
@@ -88,22 +74,14 @@ async function cleanupAllPorts() {
         failed++;
       }
     } catch (error) {
-      console.log(`❌ Failed to clean port ${port}:`, error.message);
       failed++;
     }
   }
 
-  console.log("");
-  console.log("📊 Cleanup Summary:");
-  console.log(`   ✅ Cleaned: ${cleaned} ports`);
-  console.log(`   ❌ Failed: ${failed} ports`);
-
   if (failed === 0) {
-    console.log("🎉 All ports cleaned successfully!");
+    console.log("✅ All ports cleaned successfully!");
   } else {
-    console.log(
-      "⚠️  Some ports could not be cleaned. Manual intervention may be required."
-    );
+    console.log(`⚠️  ${failed} ports could not be cleaned`);
   }
 
   return failed === 0;
