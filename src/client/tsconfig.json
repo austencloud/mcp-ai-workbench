@@ -1,0 +1,21 @@
+{
+  "extends": "../../.svelte-kit/tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "types": ["vite/client", "svelte"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "paths": {
+      "$lib": ["./lib"],
+      "$lib/*": ["./lib/*"],
+      "$shared": ["../shared"],
+      "$shared/*": ["../shared/*"],
+      "$types": ["../shared/types"],
+      "$types/*": ["../shared/types/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.js", "**/*.svelte", "../shared/**/*.ts"],
+  "exclude": ["node_modules", "../../dist"]
+}

@@ -1,0 +1,5 @@
+{
+  "provider": "ollama",
+  "model": "llama3:latest",
+  "timestamp": 1750613682602
+}

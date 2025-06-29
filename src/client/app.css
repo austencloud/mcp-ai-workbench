@@ -1,0 +1,585 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 2025-Ready CSS Variables for Enhanced Glassmorphism & Spatial UI */
+:root {
+  /* Enhanced Glass Morphism Variables */
+  --glass-bg-primary: rgba(255, 255, 255, 0.08);
+  --glass-bg-secondary: rgba(255, 255, 255, 0.12);
+  --glass-bg-tertiary: rgba(255, 255, 255, 0.15);
+  --glass-border-primary: rgba(255, 255, 255, 0.12);
+  --glass-border-secondary: rgba(255, 255, 255, 0.18);
+  --glass-border-accent: rgba(255, 255, 255, 0.25);
+
+  /* Volumetric Depth System */
+  --depth-1: 0 1px 2px rgba(0, 0, 0, 0.07);
+  --depth-2: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --depth-3: 0 12px 32px rgba(0, 0, 0, 0.25);
+  --depth-4: 0 24px 64px rgba(0, 0, 0, 0.35);
+  --depth-5: 0 40px 96px rgba(0, 0, 0, 0.45);
+
+  /* Enhanced Neon System with Variable Intensity */
+  --neon-blue: #00d4ff;
+  --neon-purple: #8b5cf6;
+  --neon-pink: #f472b6;
+  --neon-green: #4ade80;
+  --neon-orange: #fb923c;
+  --neon-intensity: 0.8;
+  --neon-glow-subtle: 0 0 15px;
+  --neon-glow-medium: 0 0 25px;
+  --neon-glow-strong: 0 0 40px;
+
+  /* Adaptive Lighting System */
+  --light-x: 50%;
+  --light-y: 30%;
+  --light-color: var(--neon-blue);
+  --ambient-light: rgba(139, 92, 246, 0.05);
+
+  /* Enhanced Color Palette */
+  --dark-bg: #0a0a0f;
+  --dark-surface: #1a1a2e;
+  --dark-elevated: #252545;
+  --accent-primary: #3b82f6;
+  --accent-secondary: #8b5cf6;
+  --accent-tertiary: #f472b6;
+
+  /* Animation Timing Functions */
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --ease-elastic: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  /* Accessibility & Contrast */
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.8);
+  --text-tertiary: rgba(255, 255, 255, 0.65);
+  --text-muted: rgba(255, 255, 255, 0.5);
+  --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: linear-gradient(
+    135deg,
+    #0a0a0f 0%,
+    #1a1a2e 25%,
+    #581c87 50%,
+    #1a1a2e 75%,
+    #0a0a0f 100%
+  );
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter",
+    sans-serif;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  perspective: 1200px;
+}
+
+/* Enhanced Ambient Lighting Layer */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+      circle at 20% 80%,
+      rgba(120, 119, 198, 0.25) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      circle at 80% 20%,
+      rgba(255, 119, 198, 0.25) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      circle at 40% 40%,
+      rgba(120, 219, 255, 0.15) 0%,
+      transparent 60%
+    );
+  z-index: -2;
+  animation: float 25s ease-in-out infinite;
+}
+
+/* Adaptive AI Lighting System */
+body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle at var(--light-x) var(--light-y),
+    var(--light-color) 0%,
+    transparent 70%
+  );
+  opacity: calc(var(--neon-intensity) * 0.15);
+  z-index: -1;
+  pointer-events: none;
+  transition: all 1.2s var(--ease-smooth);
+  mix-blend-mode: screen;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  33% {
+    transform: translateY(-20px) rotate(1deg);
+  }
+  66% {
+    transform: translateY(10px) rotate(-1deg);
+  }
+}
+
+/* Custom Grid System */
+.grid-cols-sidebar {
+  grid-template-columns: 320px 1fr;
+}
+
+/* ===== ENHANCED GLASS MORPHISM SYSTEM ===== */
+
+/* Enhanced Glass - Interactive Elements */
+.glass-strong {
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  background: var(--glass-bg-secondary);
+  border: 1px solid transparent;
+  border-radius: 20px;
+  box-shadow: var(--depth-4), inset 0 2px 4px rgba(255, 255, 255, 0.1);
+  z-index: 2;
+  transition: all 0.3s var(--ease-smooth);
+}
+
+.glass-strong:hover {
+  background: var(--glass-bg-tertiary);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: var(--depth-5), inset 0 2px 4px rgba(255, 255, 255, 0.15);
+  transform: translateY(-4px);
+}
+
+/* Readable Glass - Content Areas */
+.glass-readable {
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  background: var(--glass-bg-tertiary);
+  border: 1px solid transparent;
+  border-radius: 18px;
+  box-shadow: var(--depth-2), inset 0 1px 2px rgba(255, 255, 255, 0.12);
+  z-index: 1;
+  transition: all 0.3s var(--ease-smooth);
+}
+
+/* Volumetric Glass - Floating Elements */
+.glass-volumetric {
+  backdrop-filter: blur(28px) saturate(220%);
+  -webkit-backdrop-filter: blur(28px) saturate(220%);
+  background: linear-gradient(
+    135deg,
+    var(--glass-bg-secondary) 0%,
+    var(--glass-bg-primary) 100%
+  );
+  border: 1px solid transparent;
+  border-radius: 32px;
+  box-shadow: var(--depth-5), inset 0 4px 8px rgba(255, 255, 255, 0.08),
+    0 0 40px rgba(139, 92, 246, 0.1);
+  position: relative;
+  z-index: 3;
+  transition: all 0.5s var(--ease-smooth);
+  transform: translateZ(20px);
+}
+
+.glass-volumetric:hover {
+  transform: translateY(-8px) translateZ(20px) scale(1.02);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: var(--depth-5), inset 0 4px 8px rgba(255, 255, 255, 0.12),
+    0 0 60px rgba(139, 92, 246, 0.2);
+}
+
+/* Additional Button States */
+.btn-futuristic:hover {
+  background: var(--glass-bg-secondary);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.btn-futuristic:active {
+  transform: scale(0.95);
+}
+
+.btn-primary-futuristic:hover {
+  border-color: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.25);
+}
+
+/* Inputs */
+.input-futuristic {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: white;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.input-futuristic::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.input-futuristic:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.7);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Sidebar */
+.sidebar-futuristic {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  border-right: 1px solid rgba(255, 255, 255, 0.3);
+  overflow-y: auto;
+  z-index: 25;
+}
+
+/* Sidebar Collapsible Sections */
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-section.collapsed {
+  flex: 0 0 auto;
+}
+
+.sidebar-section.expanded {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+.section-header {
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.section-content {
+  overflow: hidden;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.section-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-10px);
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.section-content.expanded {
+  max-height: none;
+  opacity: 1;
+  transform: translateY(0);
+  margin-top: 0.75rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Ensure FileBrowser and other components can expand properly */
+.section-content.expanded > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Smooth chevron rotation */
+.section-header svg {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced hover effects for section headers */
+.section-header:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.section-header:active {
+  transform: scale(0.98);
+}
+
+/* Chat Components */
+.chat-container {
+  z-index: 10;
+}
+
+.chat-bubble-futuristic {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 1rem;
+  padding: 1rem;
+  max-width: none;
+}
+
+.chat-bubble-user {
+  background: linear-gradient(
+    to right,
+    rgba(59, 130, 246, 0.2),
+    rgba(139, 92, 246, 0.2)
+  );
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.chat-bubble-assistant {
+  background: linear-gradient(
+    to right,
+    rgba(139, 92, 246, 0.2),
+    rgba(244, 114, 182, 0.2)
+  );
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+/* Custom Typography */
+.text-gradient {
+  background: linear-gradient(to right, #60a5fa, #a78bfa, #f472b6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Dropdowns - High Z-Index */
+.dropdown-container {
+  position: relative;
+  z-index: 1000;
+}
+
+.dropdown-overlay {
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(2px);
+}
+
+.dropdown-force-top {
+  z-index: 10000 !important;
+  position: relative;
+}
+
+/* Dropdown Menu Specific Z-Index */
+.dropdown-menu {
+  z-index: 10001 !important;
+  position: absolute;
+  backdrop-filter: blur(24px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(200%) !important;
+  background: rgba(20, 20, 40, 0.95) !important;
+  border: 1px solid var(--glass-border-accent) !important;
+  box-shadow: var(--depth-5), 0 0 60px rgba(0, 0, 0, 0.5),
+    0 0 20px rgba(139, 92, 246, 0.3) !important;
+  animation: dropdown-appear 0.2s var(--ease-smooth) forwards;
+}
+
+@keyframes dropdown-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Ensure parent containers don't interfere */
+.dropdown-parent {
+  position: relative;
+  z-index: 1001;
+}
+
+/* Animations */
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.6);
+  }
+}
+
+/* Additional hover effects */
+.hover-lift {
+  transition: all 0.3s ease;
+}
+
+.neon-glow {
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+.neon-glow:hover {
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+}
+
+/* Custom animations and utilities */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Modern 2025 Cursor Interactions */
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.cursor-default {
+  cursor: default;
+}
+
+.cursor-not-allowed {
+  cursor: not-allowed;
+}
+
+.cursor-grab {
+  cursor: grab;
+}
+
+.cursor-grabbing {
+  cursor: grabbing;
+}
+
+.cursor-text {
+  cursor: text;
+}
+
+.cursor-help {
+  cursor: help;
+}
+
+.cursor-wait {
+  cursor: wait;
+}
+
+/* Interactive Elements */
+button,
+.btn-futuristic,
+.clickable {
+  cursor: pointer;
+  transition: all 0.3s var(--ease-smooth);
+}
+
+button:disabled,
+.btn-futuristic:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+input,
+textarea,
+.input-futuristic {
+  cursor: text;
+}
+
+a,
+.link {
+  cursor: pointer;
+}
+
+/* Hover States for Better UX */
+.hover-scale:hover {
+  transform: scale(1.02);
+  cursor: pointer;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+  cursor: pointer;
+}
+
+.hover-brightness:hover {
+  filter: brightness(1.1);
+  cursor: pointer;
+}
+
+/* Selection States */
+.selectable {
+  user-select: text;
+  cursor: text;
+}
+
+.non-selectable {
+  user-select: none;
+}
+
+/* Scrollable Areas */
+.scrollable {
+  cursor: default;
+}
+
+.scrollable::-webkit-scrollbar-thumb {
+  cursor: pointer;
+}
+
+/* Custom Scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  cursor: pointer;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  cursor: default;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

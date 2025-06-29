@@ -58,7 +58,10 @@ cleanupPorts.on("close", () => {
 
   frontend.stdout.on("data", (data) => {
     const output = data.toString();
-    if ((output.includes("ready in") || output.includes("Local:")) && !frontendReady) {
+    if (
+      (output.includes("ready in") || output.includes("Local:")) &&
+      !frontendReady
+    ) {
       console.log(`${colors.green}✅ Frontend ready${colors.reset}`);
       frontendReady = true;
       checkAllReady();
@@ -71,7 +74,7 @@ cleanupPorts.on("close", () => {
         `\n${colors.cyan}${colors.bright}🎉 Ready to go!${colors.reset}`
       );
       console.log(
-        `${colors.blue}${colors.bright}➜ Open: http://localhost:5173${colors.reset}\n`
+        `${colors.blue}${colors.bright}➜ Open: http://localhost:4174${colors.reset}\n`
       );
       console.log(`${colors.gray}Press Ctrl+C to stop${colors.reset}`);
     }
